@@ -37,8 +37,8 @@ class FluxAPI extends Tool {
     this.isAgent = fields.isAgent;
     this.returnMetadata = fields.returnMetadata ?? false;
 
-    /** @type {Array} Store image files for editing */
-    this.image_ids = fields.image_ids || [];
+    this.req = fields.req;
+    this.imageFile = fields.imageFile || null;
 
     if (fields.processFileURL) {
       /** @type {processFileURL} Necessary for output to contain all image metadata. */
@@ -58,7 +58,7 @@ class FluxAPI extends Tool {
     
     // For EDITING (action="edit"): 
     // 1. ALWAYS set action="edit" when modifying existing images
-    // 2. ALWAYS include exactly ONE image_id in the image_ids array parameter
+    // 2. ALWAYS include exactly ONE image in the file_id parameter
     // 3. Describe the desired changes or enhancements to the image in detail
     // 4. Focus on what should be added, modified, or enhanced rather than what to remove`;
 
@@ -77,12 +77,6 @@ class FluxAPI extends Tool {
         .string()
         .describe(
           'Text prompt for image generation and editing.',
-        ),
-      image_ids: z
-        .array(z.string())
-        .optional()
-        .describe(
-          'IDs of previously generated or uploaded images to use for editing. Only one image is supported for Flux Kontext Pro.',
         ),
       prompt_upsampling: z
         .boolean()
@@ -164,51 +158,55 @@ class FluxAPI extends Tool {
     }
 
     // Determine if this is an edit or generate request
-    const isEdit = this.image_ids && this.image_ids.length > 0;
+    const isEdit = this.imageFile ? true : false;
     
     // For editing, we need to get the image file
     let imageBase64 = null;
-    let imageFile = null;
+    let imageFile = this.imageFile;
+    /** @type {Record<FileSources, undefined | NodeStreamDownloader<File>>} */
+    const streamMethods = {};
     
     if (isEdit) {
-      if (this.image_ids.length > 1) {
-        return this.returnValue('Flux Kontext Pro only supports editing one image at a time. Please provide only one image ID.');
+      if (!imageFile) {
+        return this.returnValue('Flux Kontext Pro needs one image to edit. Please provide it.');
       }
       
       try {
-        const imageId = this.image_ids[0];
+        const imageId = imageFile.file_id;
+        const source = imageFile.source || this.fileStrategy;
+        if (!source) {
+          throw new Error('No source found for image file');
+        }
         logger.debug('[FluxAPI] Getting image file for editing:', imageId);
-        
-        // Get the file from the database
-        const files = await getFiles({ file_id: imageId });
-        
-        if (!files || files.length === 0) {
-          return this.returnValue(`Image with ID ${imageId} not found.`);
+
+        /** @type {NodeStream<File>} */
+        let stream;
+        /** @type {NodeStreamDownloader<File>} */
+        let getDownloadStream;
+        if (streamMethods[source]) {
+          getDownloadStream = streamMethods[source];
+        } else {
+          ({ getDownloadStream } = getStrategyFunctions(source));
+          streamMethods[source] = getDownloadStream;
         }
-        imageFile = files[0];
-        
-        // For local files, fetch from the server URL
-        const serverDomain = process.env.DOMAIN_SERVER || 'http://localhost:3080';
-        const imageUrl = `${serverDomain}${imageFile.filepath}`;
-        logger.debug('[FluxAPI] Fetching image from URL:', imageUrl);
-        
-        // Fetch the image from the URL
-        const fetchOptions = {};
-        if (process.env.PROXY) {
-          const { HttpsProxyAgent } = require('https-proxy-agent');
-          fetchOptions.agent = new HttpsProxyAgent(process.env.PROXY);
+        if (!getDownloadStream) {
+          throw new Error(`No download stream method found for source: ${source}`);
         }
-        
-        const imageResponse = await fetch(imageUrl, fetchOptions);
-        
-        if (!imageResponse.ok) {
-          return this.returnValue(`Failed to fetch image from ${imageUrl}: ${imageResponse.status} ${imageResponse.statusText}`);
+        stream = await getDownloadStream(this.req, imageFile.filepath);
+        if (!stream) {
+          throw new Error('Failed to get download stream for image file');
         }
+
+        // Convert stream to buffer
+        const chunks = [];
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
         
-        const arrayBuffer = await imageResponse.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
+        // Convert buffer to base64
         imageBase64 = buffer.toString('base64');
-        logger.debug('[FluxAPI] Image loaded for editing from URL, base64 length:', imageBase64.length);
+        logger.debug('[FluxAPI] Image loaded for editing, base64 length:', imageBase64.length);
       } catch (error) {
         logger.error('[FluxAPI] Error getting image for editing:', error);
         return this.returnValue(`Error getting image for editing: ${error.message}`);

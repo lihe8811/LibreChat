@@ -215,19 +215,11 @@ const loadTools = async ({
       
       // Create context for image files if they exist
       let toolContext = '';
-      let image_ids = [];
       if (imageFiles.length > 0) {
         toolContext = 'Image files provided in this request (their image IDs listed in order of appearance) available for image editing with Flux Kontext Pro:';
+        toolContext += `\n\t- ${imageFiles[0].file_id}`;
         
-        for (let i = 0; i < imageFiles.length; i++) {
-          const file = imageFiles[i];
-          if (!file) continue;
-          
-          toolContext += `\n\t- ${file.file_id}`;
-          image_ids.push(file.file_id);
-        }
-        
-        toolContext += `\n\nInclude any you need in the \`image_ids\` array when calling \`flux\` with action="edit". Note that Flux Kontext Pro only supports editing one image at a time.`;
+        toolContext += `\n\nInclude any you need in the \`imageFile\` when calling \`flux\` with action="edit". Note that Flux Kontext Pro only supports editing one image at a time.`;
         toolContext += `\n\nFor image generation, use action="generate" (default) and provide a detailed prompt.`;
       } else {
         toolContext = `# \`flux\`:
@@ -247,7 +239,8 @@ const loadTools = async ({
         isAgent: !!agent,
         returnMetadata: options.returnMetadata,
         processFileURL: options.processFileURL,
-        image_ids,
+        req: options.req,
+        imageFile: imageFiles.length > 0 ? imageFiles[0] : null,
         ...toolOptions.flux,
       });
     },
