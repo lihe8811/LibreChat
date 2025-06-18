@@ -112,6 +112,9 @@ auth.json
 # User uploads
 uploads/
 
+# Backup files
+backup/
+
 # owner
 release/
 

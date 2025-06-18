@@ -7,7 +7,7 @@ services:
     image: lihe8811/librechat-dev-api:latest
     container_name: LibreChat-API
     ports:
-      - 3080:3080
+      - 8880:8880
     depends_on:
       - mongodb
       - rag_api
