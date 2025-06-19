@@ -63,7 +63,7 @@ class FluxAPI extends Tool {
     // 4. Focus on what should be added, modified, or enhanced rather than what to remove`;
 
     // Add base URL from environment variable with fallback
-    this.baseUrl = process.env.FLUX_API_BASE_URL || 'https://api.bfl.ai';
+    this.baseUrl = process.env.FLUX_API_BASE_URL || 'https://api.us1.bfl.ai';
 
     // Define the schema for structured input
     this.schema = z.object({
