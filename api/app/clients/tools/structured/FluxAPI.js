@@ -55,12 +55,14 @@ class FluxAPI extends Tool {
     // For GENERATION (action="generate"): Transform any image description into a detailed, high-quality prompt. Never submit a prompt under 3 sentences. Follow these core rules:
     // 1. ALWAYS enhance basic prompts into 5-10 detailed sentences (e.g., "a cat" becomes: "A close-up photo of a sleek Siamese cat with piercing blue eyes. The cat sits elegantly on a vintage leather armchair, its tail curled gracefully around its paws. Warm afternoon sunlight streams through a nearby window, casting gentle shadows across its face and highlighting the subtle variations in its cream and chocolate-point fur. The background is softly blurred, creating a shallow depth of field that draws attention to the cat's expressive features. The overall composition has a peaceful, contemplative mood with a professional photography style.")
     // 2. Each prompt MUST be 3-6 descriptive sentences minimum, focusing on visual elements: lighting, composition, mood, and style
+    // 3. Don't set aspect_ratio if the user doesn't provide it explicitly
     
     // For EDITING (action="edit"): 
     // 1. ALWAYS set action="edit" when modifying existing images
     // 2. ALWAYS include exactly ONE image in the file_id parameter
     // 3. Describe the desired changes or enhancements to the image in detail
-    // 4. Focus on what should be added, modified, or enhanced rather than what to remove`;
+    // 4. Focus on what should be added, modified, or enhanced rather than what to remove
+    // 5. Don't set aspect_ratio if the user doesn't provide it explicitly`;
 
     // Add base URL from environment variable with fallback
     this.baseUrl = process.env.FLUX_API_BASE_URL || 'https://api.us1.bfl.ai';
