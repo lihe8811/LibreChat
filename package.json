@@ -75,12 +75,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/danny-avila/LibreChat.git"
+    "url": "git+https://github.com/lihe8811/LibreChat.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/danny-avila/LibreChat/issues"
+    "url": "https://github.com/lihe8811/LibreChat/issues"
   },
   "homepage": "https://librechat.ai/",
   "devDependencies": {
