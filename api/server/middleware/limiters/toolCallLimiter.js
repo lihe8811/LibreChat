@@ -5,6 +5,8 @@ const logViolation = require('~/cache/logViolation');
 
 const { TOOL_CALL_VIOLATION_SCORE: score } = process.env;
 
+const { TOOL_CALL_VIOLATION_SCORE: score } = process.env;
+
 const handler = async (req, res) => {
   const type = ViolationTypes.TOOL_CALL_LIMIT;
   const errorMessage = {
