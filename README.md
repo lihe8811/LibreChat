@@ -1,7 +1,5 @@
 <p align="center">
-  <a href="https://librechat.ai">
-    <img src="client/public/assets/logo.svg" height="256">
-  </a>
+  <img src="client/public/assets/logo.svg" height="256">
   <h1 align="center">
     <a href="https://librechat.ai">LibreChat</a>
   </h1>
