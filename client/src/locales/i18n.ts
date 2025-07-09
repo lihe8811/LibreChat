@@ -83,6 +83,13 @@ i18n
       zh: ['zh-Hans', 'en'],
       default: ['en'],
     },
+    detection: {
+      order: ['querystring', 'cookie', 'localStorage', 'sessionStorage', 'navigator', 'htmlTag'],
+      lookupQuerystring: 'lng',
+      lookupCookie: 'i18next',
+      lookupLocalStorage: 'i18nextLng',
+      caches: ['localStorage', 'cookie'],
+    },
     fallbackNS: 'translation',
     ns: ['translation'],
     debug: false,
