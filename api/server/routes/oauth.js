@@ -1,7 +1,8 @@
 // file deepcode ignore NoRateLimitingForLogin: Rate limiting is handled by the `loginLimiter` middleware
 const express = require('express');
 const passport = require('passport');
-const { randomState } = require('openid-client');
+// Import randomState dynamically later
+// const { randomState } = require('openid-client');
 const {
   checkBan,
   logHeaders,
@@ -19,6 +20,20 @@ const domains = {
   client: process.env.DOMAIN_CLIENT,
   server: process.env.DOMAIN_SERVER,
 };
+
+// Initialize variable to store randomState function after dynamic import
+let randomState;
+
+// Dynamically import openid-client
+(async () => {
+  try {
+    const openidClient = await import('openid-client');
+    randomState = openidClient.randomState;
+    logger.info('Successfully imported openid-client');
+  } catch (err) {
+    logger.error('Error importing openid-client:', err);
+  }
+})();
 
 router.use(logHeaders);
 router.use(loginLimiter);
@@ -106,11 +121,22 @@ router.get(
 /**
  * OpenID Routes
  */
-router.get('/openid', (req, res, next) => {
-  return passport.authenticate('openid', {
-    session: false,
-    state: randomState(),
-  })(req, res, next);
+router.get('/openid', async (req, res, next) => {
+  try {
+    // If randomState is not yet initialized, import it now
+    if (!randomState) {
+      const openidClient = await import('openid-client');
+      randomState = openidClient.randomState;
+    }
+    
+    return passport.authenticate('openid', {
+      session: false,
+      state: randomState(),
+    })(req, res, next);
+  } catch (err) {
+    logger.error('Error in OpenID authentication:', err);
+    res.redirect(`${domains.client}/oauth/error`);
+  }
 });
 
 router.get(
