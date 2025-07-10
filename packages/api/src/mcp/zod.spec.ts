@@ -2,11 +2,15 @@
 // zod.spec.ts
 import { z } from 'zod';
 import type { JsonSchemaType } from '~/types';
+<<<<<<< HEAD
 <<<<<<<< HEAD:packages/api/src/mcp/__tests__/zod.spec.ts
 import { resolveJsonSchemaRefs, convertJsonSchemaToZod, convertWithResolvedRefs } from '../zod';
 ========
 import { resolveJsonSchemaRefs, convertJsonSchemaToZod } from './zod';
 >>>>>>>> da2a3125f (🧩 fix: `additionalProperties` Handling and Ref Resolution in Zod Schemas (#8381)):packages/api/src/mcp/zod.spec.ts
+=======
+import { resolveJsonSchemaRefs, convertJsonSchemaToZod, convertWithResolvedRefs } from './zod';
+>>>>>>> 76cfdc805 (🔃 refactor: Conslidate JSON Schema Conversion to Schema)
 
 describe('convertJsonSchemaToZod', () => {
   describe('primitive types', () => {
@@ -1113,11 +1117,15 @@ describe('convertJsonSchemaToZod', () => {
         },
       };
 
+<<<<<<< HEAD
 <<<<<<<< HEAD:packages/api/src/mcp/__tests__/zod.spec.ts
       const zodSchema = convertWithResolvedRefs(schema, {
 ========
       const zodSchema = convertJsonSchemaToZod(schema, {
 >>>>>>>> da2a3125f (🧩 fix: `additionalProperties` Handling and Ref Resolution in Zod Schemas (#8381)):packages/api/src/mcp/zod.spec.ts
+=======
+      const zodSchema = convertWithResolvedRefs(schema, {
+>>>>>>> 76cfdc805 (🔃 refactor: Conslidate JSON Schema Conversion to Schema)
         allowEmptyObject: false,
         transformOneOfAnyOf: true,
       });
@@ -1146,11 +1154,15 @@ describe('convertJsonSchemaToZod', () => {
         },
       };
 
+<<<<<<< HEAD
 <<<<<<<< HEAD:packages/api/src/mcp/__tests__/zod.spec.ts
       const zodSchemaWithoutAllow = convertWithResolvedRefs(schema, {
 ========
       const zodSchemaWithoutAllow = convertJsonSchemaToZod(schema, {
 >>>>>>>> da2a3125f (🧩 fix: `additionalProperties` Handling and Ref Resolution in Zod Schemas (#8381)):packages/api/src/mcp/zod.spec.ts
+=======
+      const zodSchemaWithoutAllow = convertWithResolvedRefs(schema, {
+>>>>>>> 76cfdc805 (🔃 refactor: Conslidate JSON Schema Conversion to Schema)
         allowEmptyObject: false,
       });
 
@@ -1182,11 +1194,15 @@ describe('convertJsonSchemaToZod', () => {
         ],
       };
 
+<<<<<<< HEAD
 <<<<<<<< HEAD:packages/api/src/mcp/__tests__/zod.spec.ts
       const zodSchema = convertWithResolvedRefs(schema, {
 ========
       const zodSchema = convertJsonSchemaToZod(schema, {
 >>>>>>>> da2a3125f (🧩 fix: `additionalProperties` Handling and Ref Resolution in Zod Schemas (#8381)):packages/api/src/mcp/zod.spec.ts
+=======
+      const zodSchema = convertWithResolvedRefs(schema, {
+>>>>>>> 76cfdc805 (🔃 refactor: Conslidate JSON Schema Conversion to Schema)
         allowEmptyObject: false,
         transformOneOfAnyOf: true,
       });
@@ -1258,11 +1274,15 @@ describe('convertJsonSchemaToZod', () => {
         },
       };
 
+<<<<<<< HEAD
 <<<<<<<< HEAD:packages/api/src/mcp/__tests__/zod.spec.ts
       const zodSchema = convertWithResolvedRefs(schema, {
 ========
       const zodSchema = convertJsonSchemaToZod(schema, {
 >>>>>>>> da2a3125f (🧩 fix: `additionalProperties` Handling and Ref Resolution in Zod Schemas (#8381)):packages/api/src/mcp/zod.spec.ts
+=======
+      const zodSchema = convertWithResolvedRefs(schema, {
+>>>>>>> 76cfdc805 (🔃 refactor: Conslidate JSON Schema Conversion to Schema)
         allowEmptyObject: false,
         transformOneOfAnyOf: true,
       });
@@ -1341,10 +1361,14 @@ describe('convertJsonSchemaToZod', () => {
       };
 
       // First test without resolving refs - should not work properly
+<<<<<<< HEAD
 <<<<<<<< HEAD:packages/api/src/mcp/__tests__/zod.spec.ts
       // Intentionally NOT using convertWithResolvedRefs here to test the behavior without ref resolution
 ========
 >>>>>>>> da2a3125f (🧩 fix: `additionalProperties` Handling and Ref Resolution in Zod Schemas (#8381)):packages/api/src/mcp/zod.spec.ts
+=======
+      // Intentionally NOT using convertWithResolvedRefs here to test the behavior without ref resolution
+>>>>>>> 76cfdc805 (🔃 refactor: Conslidate JSON Schema Conversion to Schema)
       const zodSchemaUnresolved = convertJsonSchemaToZod(schemaWithRefs as any, {
         allowEmptyObject: true,
         transformOneOfAnyOf: true,
@@ -1376,10 +1400,14 @@ describe('convertJsonSchemaToZod', () => {
         'anyOf',
       );
 
+<<<<<<< HEAD
 <<<<<<<< HEAD:packages/api/src/mcp/__tests__/zod.spec.ts
       // Already resolved manually above, so we use convertJsonSchemaToZod directly
 ========
 >>>>>>>> da2a3125f (🧩 fix: `additionalProperties` Handling and Ref Resolution in Zod Schemas (#8381)):packages/api/src/mcp/zod.spec.ts
+=======
+      // Already resolved manually above, so we use convertJsonSchemaToZod directly
+>>>>>>> 76cfdc805 (🔃 refactor: Conslidate JSON Schema Conversion to Schema)
       const zodSchemaResolved = convertJsonSchemaToZod(resolvedSchema as any, {
         allowEmptyObject: true,
         transformOneOfAnyOf: true,
@@ -1416,10 +1444,14 @@ describe('convertJsonSchemaToZod', () => {
       expect(resolved).toBeDefined();
 
       // The circular reference should be broken with a simple object schema
+<<<<<<< HEAD
 <<<<<<<< HEAD:packages/api/src/mcp/__tests__/zod.spec.ts
       // Already resolved manually above, so we use convertJsonSchemaToZod directly
 ========
 >>>>>>>> da2a3125f (🧩 fix: `additionalProperties` Handling and Ref Resolution in Zod Schemas (#8381)):packages/api/src/mcp/zod.spec.ts
+=======
+      // Already resolved manually above, so we use convertJsonSchemaToZod directly
+>>>>>>> 76cfdc805 (🔃 refactor: Conslidate JSON Schema Conversion to Schema)
       const zodSchema = convertJsonSchemaToZod(resolved as any, {
         allowEmptyObject: true,
         transformOneOfAnyOf: true,
