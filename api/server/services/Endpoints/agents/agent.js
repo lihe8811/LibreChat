@@ -96,6 +96,7 @@ const initializeAgent = async ({
     attachments: currentFiles,
     tool_resources: agent.tool_resources,
     requestFileSet: new Set(requestFiles?.map((file) => file.file_id)),
+    agentId: agent.id,
   });
 
   const provider = agent.provider;

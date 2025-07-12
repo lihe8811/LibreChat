@@ -3,6 +3,8 @@ import { useToastContext } from '@librechat/client';
 import { EToolResources } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import { useDeleteFilesMutation } from '~/data-provider';
+import { useToastContext } from '~/Providers';
+import { useLocalize } from '~/hooks';
 import { useFileDeletion } from '~/hooks/Files';
 import FileContainer from './FileContainer';
 import { useLocalize } from '~/hooks';
