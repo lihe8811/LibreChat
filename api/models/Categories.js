@@ -2,40 +2,40 @@ const { logger } = require('~/config');
 
 const options = [
   {
-    label: 'com_ui_idea',
-    value: 'idea',
+    label: 'com_ui_garment',
+    value: 'garment',
   },
   {
-    label: 'com_ui_travel',
-    value: 'travel',
+    label: 'com_ui_accessories',
+    value: 'accessories',
   },
   {
-    label: 'com_ui_teach_or_explain',
-    value: 'teach_or_explain',
+    label: 'com_ui_kids',
+    value: 'kids',
   },
   {
-    label: 'com_ui_write',
-    value: 'write',
+    label: 'com_ui_underwear',
+    value: 'underwear',
   },
   {
-    label: 'com_ui_shop',
-    value: 'shop',
+    label: 'com_ui_scarf',
+    value: 'scarf',
   },
   {
-    label: 'com_ui_code',
-    value: 'code',
+    label: 'com_ui_kitchen',
+    value: 'kitchen',
   },
   {
-    label: 'com_ui_misc',
-    value: 'misc',
+    label: 'com_ui_shoes',
+    value: 'shoes',
   },
   {
-    label: 'com_ui_roleplay',
-    value: 'roleplay',
+    label: 'com_ui_decoration',
+    value: 'decoration',
   },
   {
-    label: 'com_ui_finance',
-    value: 'finance',
+    label: 'com_ui_others',
+    value: 'others',
   },
 ];
 

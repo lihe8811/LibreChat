@@ -13,27 +13,27 @@ import {
 import { cn } from '~/utils';
 
 const categoryIconMap: Record<string, React.ElementType> = {
-  misc: FootprintsIcon,
-  roleplay: PaletteIcon,
-  write: UnderlineIcon,
-  idea: ShirtIcon,
-  shop: WormIcon,
-  finance: BlocksIcon,
-  code: CookingPotIcon,
-  travel: GemIcon,
-  teach_or_explain: BabyIcon,
+  shoes: FootprintsIcon,
+  decoration: PaletteIcon,
+  underwear: UnderlineIcon,
+  garment: ShirtIcon,
+  scarf: WormIcon,
+  others: BlocksIcon,
+  kitchen: CookingPotIcon,
+  accessories: GemIcon,
+  kids: BabyIcon,
 };
 
 const categoryColorMap: Record<string, string> = {
-  code: 'text-red-500',
-  misc: 'text-blue-300',
-  shop: 'text-purple-400',
-  idea: 'text-yellow-500/90 dark:text-yellow-300 ',
-  write: 'text-purple-400',
-  travel: 'text-yellow-500/90 dark:text-yellow-300 ',
-  finance: 'text-orange-400',
-  roleplay: 'text-orange-400',
-  teach_or_explain: 'text-blue-300',
+  kitchen: 'text-red-500',
+  shoes: 'text-blue-300',
+  scarf: 'text-purple-400',
+  garment: 'text-yellow-500/90 dark:text-yellow-300 ',
+  underwear: 'text-purple-400',
+  accessories: 'text-yellow-500/90 dark:text-yellow-300 ',
+  others: 'text-orange-400',
+  decoration: 'text-orange-400',
+  kids: 'text-blue-300',
 };
 
 export default function CategoryIcon({
