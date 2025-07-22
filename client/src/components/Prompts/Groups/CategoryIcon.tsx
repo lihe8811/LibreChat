@@ -1,27 +1,27 @@
 import React from 'react';
 import {
-  Dices,
-  BoxIcon,
-  PenLineIcon,
-  LightbulbIcon,
-  LineChartIcon,
-  ShoppingBagIcon,
-  PlaneTakeoffIcon,
-  GraduationCapIcon,
-  TerminalSquareIcon,
+  PaletteIcon,
+  UnderlineIcon,
+  ShirtIcon,
+  CookingPotIcon,
+  WormIcon,
+  GemIcon,
+  BabyIcon,
+  BlocksIcon,
+  FootprintsIcon,
 } from 'lucide-react';
 import { cn } from '~/utils';
 
 const categoryIconMap: Record<string, React.ElementType> = {
-  misc: BoxIcon,
-  roleplay: Dices,
-  write: PenLineIcon,
-  idea: LightbulbIcon,
-  shop: ShoppingBagIcon,
-  finance: LineChartIcon,
-  code: TerminalSquareIcon,
-  travel: PlaneTakeoffIcon,
-  teach_or_explain: GraduationCapIcon,
+  misc: FootprintsIcon,
+  roleplay: PaletteIcon,
+  write: UnderlineIcon,
+  idea: ShirtIcon,
+  shop: WormIcon,
+  finance: BlocksIcon,
+  code: CookingPotIcon,
+  travel: GemIcon,
+  teach_or_explain: BabyIcon,
 };
 
 const categoryColorMap: Record<string, string> = {
