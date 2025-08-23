@@ -130,7 +130,7 @@ router.get('/openid', async (req, res, next) => {
       const openidClient = await import('openid-client');
       randomState = openidClient.randomState;
     }
-    
+
     return passport.authenticate('openid', {
       session: false,
       state: randomState(),
