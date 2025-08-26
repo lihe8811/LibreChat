@@ -9,13 +9,7 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const { hashToken, logger } = require('@librechat/data-schemas');
 const { CacheKeys, ErrorTypes } = require('librechat-data-provider');
 const { Strategy: OpenIDStrategy } = require('openid-client/passport');
-const {
-  isEnabled,
-  logHeaders,
-  safeStringify,
-  findOpenIDUser,
-  getBalanceConfig,
-} = require('@librechat/api');
+const { isEnabled, logHeaders, safeStringify, getBalanceConfig } = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { findUser, createUser, updateUser } = require('~/models');
 const { getAppConfig } = require('~/server/services/Config');
