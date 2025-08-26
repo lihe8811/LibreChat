@@ -52,20 +52,7 @@ const startServer = async () => {
   const appConfig = await getAppConfig();
   await updateInterfacePermissions(appConfig);
   const indexPath = path.join(appConfig.paths.dist, 'index.html');
-  let indexHTML = fs.readFileSync(indexPath, 'utf8');
-
-  // In order to provide support to serving the application in a sub-directory
-  // We need to update the base href if the DOMAIN_CLIENT is specified and not the root path
-  if (process.env.DOMAIN_CLIENT) {
-    const clientUrl = new URL(process.env.DOMAIN_CLIENT);
-    const baseHref = clientUrl.pathname.endsWith('/')
-      ? clientUrl.pathname
-      : `${clientUrl.pathname}/`;
-    if (baseHref !== '/') {
-      logger.info(`Setting base href to ${baseHref}`);
-      indexHTML = indexHTML.replace(/base href="\/"/, `base href="${baseHref}"`);
-    }
-  }
+  const indexHTML = fs.readFileSync(indexPath, 'utf8');
 
   app.get('/health', (_req, res) => res.status(200).send('OK'));
 
@@ -83,9 +70,6 @@ const startServer = async () => {
     console.warn('Response compression has been disabled via DISABLE_COMPRESSION.');
   }
 
-  app.use(staticCache(appConfig.paths.dist));
-  app.use(staticCache(appConfig.paths.fonts));
-  app.use(staticCache(appConfig.paths.assets));
   app.use(staticCache(appConfig.paths.dist));
   app.use(staticCache(appConfig.paths.fonts));
   app.use(staticCache(appConfig.paths.assets));
@@ -166,7 +150,6 @@ const startServer = async () => {
       logger.info(`Server listening at http://${host == '0.0.0.0' ? 'localhost' : host}:${port}`);
     }
 
-    initializeMCPs().then(() => checkMigrations());
     initializeMCPs().then(() => checkMigrations());
   });
 };
