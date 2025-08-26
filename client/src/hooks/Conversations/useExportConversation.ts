@@ -1,6 +1,7 @@
 import download from 'downloadjs';
 import { useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import exportFromJSON from 'export-from-json';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,12 +15,14 @@ import {
 import type {
   TMessageContentParts,
   TConversation,
+  TMessageContentParts,
+  TConversation,
   TMessage,
   TPreset,
 } from 'librechat-data-provider';
 import useBuildMessageTree from '~/hooks/Messages/useBuildMessageTree';
 import { useScreenshot } from '~/hooks/ScreenshotContext';
-import { cleanupPreset } from '~/utils';
+import { cleanupPreset, buildTree } from '~/utils';
 
 type ExportValues = {
   fieldName: string;
@@ -51,11 +54,15 @@ export default function useExportConversation({
   const getMessageTree = useCallback(() => {
     const queryParam =
       paramId === 'new' ? paramId : (conversation?.conversationId ?? paramId ?? '');
+    const queryParam =
+      paramId === 'new' ? paramId : (conversation?.conversationId ?? paramId ?? '');
     const messages = queryClient.getQueryData<TMessage[]>([QueryKeys.messages, queryParam]) ?? [];
     const dataTree = buildTree({ messages });
     return dataTree?.length === 0 ? null : (dataTree ?? null);
+    return dataTree?.length === 0 ? null : (dataTree ?? null);
   }, [paramId, conversation?.conversationId, queryClient]);
 
+  const getMessageText = (message: Partial<TMessage> | undefined, format = 'text') => {
   const getMessageText = (message: Partial<TMessage> | undefined, format = 'text') => {
     if (!message) {
       return '';
@@ -69,6 +76,7 @@ export default function useExportConversation({
     };
 
     if (!message.content) {
+      return formatText(message.sender || '', message.text || '');
       return formatText(message.sender || '', message.text || '');
     }
 
@@ -92,6 +100,12 @@ export default function useExportConversation({
 
     if (content.type === ContentTypes.ERROR) {
       // ERROR
+      return [
+        sender,
+        typeof content[ContentTypes.TEXT] === 'object'
+          ? (content[ContentTypes.TEXT].value ?? '')
+          : (content[ContentTypes.TEXT] ?? ''),
+      ];
       return [
         sender,
         typeof content[ContentTypes.TEXT] === 'object'
@@ -164,6 +178,7 @@ export default function useExportConversation({
 
   const exportCSV = async () => {
     const data: Partial<TMessage>[] = [];
+    const data: Partial<TMessage>[] = [];
 
     const messages = await buildMessageTree({
       messageId: conversation?.conversationId,
@@ -175,6 +190,9 @@ export default function useExportConversation({
 
     if (Array.isArray(messages)) {
       for (const message of messages) {
+        if (!message) {
+          continue;
+        }
         if (!message) {
           continue;
         }
@@ -256,8 +274,10 @@ export default function useExportConversation({
       for (const message of messages) {
         data += `${getMessageText(message, 'md')}\n`;
         if (message?.error) {
+        if (message?.error) {
           data += '*(This is an error message)*\n';
         }
+        if (message?.unfinished === true) {
         if (message?.unfinished === true) {
           data += '*(This is an unfinished message)*\n';
         }
@@ -312,8 +332,10 @@ export default function useExportConversation({
       for (const message of messages) {
         data += `${getMessageText(message)}\n`;
         if (message?.error) {
+        if (message?.error) {
           data += '(This is an error message)\n';
         }
+        if (message?.unfinished === true) {
         if (message?.unfinished === true) {
           data += '(This is an unfinished message)\n';
         }
