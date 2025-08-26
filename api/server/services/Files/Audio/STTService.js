@@ -85,7 +85,6 @@ function getFileExtensionFromMime(mimeType) {
  */
 class STTService {
   constructor() {
-  constructor() {
     this.providerStrategies = {
       [STTProviders.OPENAI]: this.openAIProvider,
       [STTProviders.AZURE_OPENAI]: this.azureOpenAIProvider,
@@ -101,7 +100,6 @@ class STTService {
    */
   static async getInstance() {
     return new STTService();
-    return new STTService();
   }
 
   /**
@@ -111,11 +109,9 @@ class STTService {
    * @throws {Error} If no STT schema is set, multiple providers are set, or no provider is set.
    */
   async getProviderSchema(req) {
-    const appConfig =
-      req.config ??
-      (await getAppConfig({
-        role: req?.user?.role,
-      }));
+    const appConfig = await getAppConfig({
+      role: req?.user?.role,
+    });
     const sttSchema = appConfig?.speech?.stt;
     if (!sttSchema) {
       throw new Error(
@@ -272,6 +268,7 @@ class STTService {
    * @param {Object} res - The response object.
    * @returns {Promise<void>}
    */
+  async processSpeechToText(req, res) {
   async processSpeechToText(req, res) {
     if (!req.file) {
       return res.status(400).json({ message: 'No audio file provided in the FormData' });
