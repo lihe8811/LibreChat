@@ -17,8 +17,7 @@ const {
   isAssistantsEndpoint,
 } = require('librechat-data-provider');
 const { EnvVar } = require('@librechat/agents');
-const { logger } = require('@librechat/data-schemas');
-const { sanitizeFilename, parseText, processAudioFile } = require('@librechat/api');
+const { sanitizeFilename } = require('@librechat/api');
 const {
   convertImage,
   resizeAndConvert,
@@ -159,6 +158,7 @@ function enqueueDeleteOperation({ req, file, deleteFile, promises, resolvedFileI
  */
 const processDeleteRequest = async ({ req, files }) => {
   const appConfig = req.config;
+  const appConfig = req.config;
   const resolvedFileIds = [];
   const deletionMethods = {};
   const promises = [];
@@ -166,6 +166,7 @@ const processDeleteRequest = async ({ req, files }) => {
   /** @type {Record<string, OpenAI | undefined>} */
   const client = { [FileSources.openai]: undefined, [FileSources.azure]: undefined };
   const initializeClients = async () => {
+    if (appConfig.endpoints?.[EModelEndpoint.assistants]) {
     if (appConfig.endpoints?.[EModelEndpoint.assistants]) {
       const openAIClient = await getOpenAIClient({
         req,
@@ -553,30 +554,38 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     }
     // Note: File search processing continues to dual storage logic below
   } else if (tool_resource === EToolResources.ocr) {
+    const isOCREnabled = await checkCapability(req, AgentCapabilities.ocr);
+    if (!isOCREnabled) {
+      throw new Error('OCR capability is not enabled for Agents');
+    }
+
+    const { handleFileUpload: uploadOCR } = getStrategyFunctions(
+      appConfig?.ocr?.strategy ?? FileSources.mistral_ocr,
+    );
     const { file_id, temp_file_id = null } = metadata;
 
-    /**
-     * @param {object} params
-     * @param {string} params.text
-     * @param {number} params.bytes
-     * @param {string} params.filepath
-     * @param {string} params.type
-     * @return {Promise<void>}
-     */
-    const createTextFile = async ({ text, bytes, filepath, type = 'text/plain' }) => {
-      const fileInfo = removeNullishValues({
-        text,
-        bytes,
-        file_id,
-        temp_file_id,
-        user: req.user.id,
-        type,
-        filepath: filepath ?? file.path,
-        source: FileSources.text,
-        filename: file.originalname,
-        model: messageAttachment ? undefined : req.body.model,
-        context: messageAttachment ? FileContext.message_attachment : FileContext.agents,
-      });
+    const {
+      text,
+      bytes,
+      // TODO: OCR images support?
+      images: _i,
+      filename,
+      filepath: ocrFileURL,
+    } = await uploadOCR({ req, appConfig, file, loadAuthValues });
+
+    const fileInfo = removeNullishValues({
+      text,
+      bytes,
+      file_id,
+      temp_file_id,
+      user: req.user.id,
+      type: 'text/plain',
+      filepath: ocrFileURL,
+      source: FileSources.text,
+      filename: filename ?? file.originalname,
+      model: messageAttachment ? undefined : req.body.model,
+      context: messageAttachment ? FileContext.message_attachment : FileContext.agents,
+    });
 
       if (!messageAttachment && tool_resource) {
         await addAgentResourceFile({
@@ -844,6 +853,7 @@ const processOpenAIFile = async ({
 const processOpenAIImageOutput = async ({ req, buffer, file_id, filename, fileExt }) => {
   const currentDate = new Date();
   const formattedDate = currentDate.toISOString();
+  const appConfig = req.config;
   const appConfig = req.config;
   const _file = await convertImage(req, buffer, undefined, `${file_id}${fileExt}`);
 

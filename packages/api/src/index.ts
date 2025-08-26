@@ -1,6 +1,4 @@
 export * from './app';
-/* Auth */
-export * from './auth';
 /* MCP */
 export * from './mcp/MCPManager';
 export * from './mcp/connection';
@@ -36,5 +34,4 @@ export * from './web';
 /* types */
 export type * from './mcp/types';
 export type * from './flow/types';
-export type * from './types';
 export type * from './types';
