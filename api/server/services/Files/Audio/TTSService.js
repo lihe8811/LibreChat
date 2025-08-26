@@ -12,8 +12,10 @@ const { getAppConfig } = require('~/server/services/Config');
 class TTSService {
   /**
    * Creates an instance of TTSService.
+   * @param {Object} customConfig - The custom configuration object.
    */
-  constructor() {
+  constructor(customConfig) {
+    this.customConfig = customConfig;
     this.providerStrategies = {
       [TTSProviders.OPENAI]: this.openAIProvider.bind(this),
       [TTSProviders.AZURE_OPENAI]: this.azureOpenAIProvider.bind(this),
@@ -288,14 +290,12 @@ class TTSService {
       return res.status(400).send('Missing text in request body');
     }
 
-    const appConfig =
-      req.config ??
-      (await getAppConfig({
-        role: req.user?.role,
-      }));
+    const appConfig = await getAppConfig({
+      role: req.user?.role,
+    });
     try {
       res.setHeader('Content-Type', 'audio/mpeg');
-      const provider = this.getProvider(appConfig);
+      const provider = this.getProvider();
       const ttsSchema = appConfig?.speech?.tts?.[provider];
       const voice = await this.getVoice(ttsSchema, requestVoice);
 

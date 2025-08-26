@@ -3,8 +3,10 @@ const fs = require('fs').promises;
 const FormData = require('form-data');
 const { Readable } = require('stream');
 const { logger } = require('@librechat/data-schemas');
+const { logger } = require('@librechat/data-schemas');
 const { genAzureEndpoint } = require('@librechat/api');
 const { extractEnvVariable, STTProviders } = require('librechat-data-provider');
+const { getAppConfig } = require('~/server/services/Config');
 const { getAppConfig } = require('~/server/services/Config');
 
 /**
@@ -85,6 +87,7 @@ function getFileExtensionFromMime(mimeType) {
  */
 class STTService {
   constructor() {
+  constructor() {
     this.providerStrategies = {
       [STTProviders.OPENAI]: this.openAIProvider,
       [STTProviders.AZURE_OPENAI]: this.azureOpenAIProvider,
@@ -100,20 +103,20 @@ class STTService {
    */
   static async getInstance() {
     return new STTService();
+    return new STTService();
   }
 
   /**
    * Retrieves the configured STT provider and its schema.
    * @param {ServerRequest} req - The request object.
+   * @param {ServerRequest} req - The request object.
    * @returns {Promise<[string, Object]>} A promise that resolves to an array containing the provider name and its schema.
    * @throws {Error} If no STT schema is set, multiple providers are set, or no provider is set.
    */
   async getProviderSchema(req) {
-    const appConfig =
-      req.config ??
-      (await getAppConfig({
-        role: req?.user?.role,
-      }));
+    const appConfig = await getAppConfig({
+      role: req?.user?.role,
+    });
     const sttSchema = appConfig?.speech?.stt;
     if (!sttSchema) {
       throw new Error(
@@ -271,6 +274,7 @@ class STTService {
    * @returns {Promise<void>}
    */
   async processSpeechToText(req, res) {
+  async processSpeechToText(req, res) {
     if (!req.file) {
       return res.status(400).json({ message: 'No audio file provided in the FormData' });
     }
@@ -284,6 +288,7 @@ class STTService {
 
     try {
       const [provider, sttSchema] = await this.getProviderSchema(req);
+      const [provider, sttSchema] = await this.getProviderSchema(req);
       const text = await this.sttRequest(provider, sttSchema, { audioBuffer, audioFile });
       res.json({ text });
     } catch (error) {
@@ -293,6 +298,7 @@ class STTService {
       try {
         await fs.unlink(req.file.path);
         logger.debug('[/speech/stt] Temp. audio upload file deleted');
+      } catch {
       } catch {
         logger.debug('[/speech/stt] Temp. audio upload file already deleted');
       }
@@ -318,6 +324,7 @@ async function createSTTService() {
  */
 async function speechToText(req, res) {
   const sttService = await createSTTService();
+  await sttService.processSpeechToText(req, res);
   await sttService.processSpeechToText(req, res);
 }
 
