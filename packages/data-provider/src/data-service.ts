@@ -139,7 +139,7 @@ export const getAvailablePlugins = (): Promise<s.TPlugin[]> => {
 };
 
 export const updateUserPlugins = (payload: t.TUpdateUserPlugins) => {
-  return request.post(endpoints.userPlugins(), payload);
+  return request.post(endpoints.getUserPlugins(), payload);
 };
 
 export const reinitializeMCPServer = (serverName: string) => {
