@@ -3,10 +3,7 @@ import * as q from './types/queries';
 import { ResourceType } from './accessPermissions';
 
 let BASE_URL = '';
-if (
-  typeof process === 'undefined' ||
-  (process as typeof process & { browser?: boolean }).browser === true
-) {
+if (typeof process === 'undefined' || process.browser === true) {
   // process is only available in node context, or process.browser is true in client-side code
   // This is to ensure that the BASE_URL is set correctly based on the <base>
   // element in the HTML document, if it exists.
@@ -39,34 +36,34 @@ const buildQuery = (params: Record<string, unknown>): string => {
   return query ? `?${query}` : '';
 };
 
-export const health = () => `/health`;
-export const user = () => `/api/user`;
+export const health = () => `${BASE_URL}/health`;
+export const user = () => `${BASE_URL}/api/user`;
 
-export const balance = () => `/api/balance`;
+export const balance = () => `${BASE_URL}/api/balance`;
 
 export const userPlugins = () => `${BASE_URL}/api/user/plugins`;
 
-export const deleteUser = () => `/api/user/delete`;
+export const deleteUser = () => `${BASE_URL}/api/user/delete`;
 
-const messagesRoot = `/api/messages`;
+const messagesRoot = `${BASE_URL}/api/messages`;
 
 export const messages = (params: q.MessagesListParams) => {
   const { conversationId, messageId, ...rest } = params;
 
   if (conversationId && messageId) {
-    return `/api/messages/${conversationId}/${messageId}`;
+    return `${messagesRoot}/${conversationId}/${messageId}`;
   }
 
   if (conversationId) {
     return `${messagesRoot}/${conversationId}`;
   }
 
-  return `${messagesRoot}${buildQuery(rest)}`;
+  return `${messagesRoot}{buildQuery(rest)}`;
 };
 
 export const messagesArtifacts = (messageId: string) => `${messagesRoot}/artifacts/${messageId}`;
 
-const shareRoot = `/api/share`;
+const shareRoot = `${BASE_URL}/api/share`;
 export const shareMessages = (shareId: string) => `${shareRoot}/${shareId}`;
 export const getSharedLink = (conversationId: string) => `${shareRoot}/link/${conversationId}`;
 export const getSharedLinks = (
@@ -83,7 +80,7 @@ export const getSharedLinks = (
 export const createSharedLink = (conversationId: string) => `${shareRoot}/${conversationId}`;
 export const updateSharedLink = (shareId: string) => `${shareRoot}/${shareId}`;
 
-const keysEndpoint = `/api/keys`;
+const keysEndpoint = `${BASE_URL}/api/keys`;
 
 export const keys = () => keysEndpoint;
 
@@ -93,7 +90,7 @@ export const revokeUserKey = (name: string) => `${keysEndpoint}/${name}`;
 
 export const revokeAllUserKeys = () => `${keysEndpoint}?all=true`;
 
-export const conversationsRoot = `/api/convos`;
+export const conversationsRoot = `${BASE_URL}/api/convos`;
 
 export const conversations = (params: q.ConversationListParams) => {
   return `${conversationsRoot}${buildQuery(params)}`;
@@ -118,44 +115,44 @@ export const duplicateConversation = () => `${conversationsRoot}/duplicate`;
 export const search = (q: string, cursor?: string | null) =>
   `${BASE_URL}/api/search?q=${q}${cursor ? `&cursor=${cursor}` : ''}`;
 
-export const searchEnabled = () => `/api/search/enable`;
+export const searchEnabled = () => `${BASE_URL}/api/search/enable`;
 
-export const presets = () => `/api/presets`;
+export const presets = () => `${BASE_URL}/api/presets`;
 
-export const deletePreset = () => `/api/presets/delete`;
+export const deletePreset = () => `${BASE_URL}/api/presets/delete`;
 
-export const aiEndpoints = () => '/api/endpoints';
+export const aiEndpoints = () => `${BASE_URL}/api/endpoints`;
 
-export const models = () => '/api/models';
+export const models = () => `${BASE_URL}/api/models`;
 
-export const tokenizer = () => `/api/tokenizer`;
+export const tokenizer = () => `${BASE_URL}/api/tokenizer`;
 
-export const login = () => `/api/auth/login`;
+export const login = () => `${BASE_URL}/api/auth/login`;
 
-export const logout = () => `/api/auth/logout`;
+export const logout = () => `${BASE_URL}/api/auth/logout`;
 
-export const register = () => `/api/auth/register`;
+export const register = () => `${BASE_URL}/api/auth/register`;
 
-export const loginFacebook = () => `/api/auth/facebook`;
+export const loginFacebook = () => `${BASE_URL}/api/auth/facebook`;
 
-export const loginGoogle = () => `/api/auth/google`;
+export const loginGoogle = () => `${BASE_URL}/api/auth/google`;
 
 export const refreshToken = (retry?: boolean) =>
   `${BASE_URL}/api/auth/refresh${retry === true ? '?retry=true' : ''}`;
 
-export const requestPasswordReset = () => `/api/auth/requestPasswordReset`;
+export const requestPasswordReset = () => `${BASE_URL}/api/auth/requestPasswordReset`;
 
-export const resetPassword = () => `/api/auth/resetPassword`;
+export const resetPassword = () => `${BASE_URL}/api/auth/resetPassword`;
 
-export const verifyEmail = () => `/api/user/verify`;
+export const verifyEmail = () => `${BASE_URL}/api/user/verify`;
 
-export const resendVerificationEmail = () => `/api/user/verify/resend`;
+export const resendVerificationEmail = () => `${BASE_URL}/api/user/verify/resend`;
 
-export const plugins = () => `/api/plugins`;
+export const plugins = () => `${BASE_URL}/api/plugins`;
 
 export const mcpReinitialize = (serverName: string) =>
-  `/api/mcp/${serverName}/reinitialize`;
-export const mcpConnectionStatus = () => `/api/mcp/connection/status`;
+  `${BASE_URL}/api/mcp/${serverName}/reinitialize`;
+export const mcpConnectionStatus = () => `${BASE_URL}/api/mcp/connection/status`;
 export const mcpServerConnectionStatus = (serverName: string) =>
   `${BASE_URL}/api/mcp/connection/status/${serverName}`;
 export const mcpAuthValues = (serverName: string) => {
@@ -166,12 +163,12 @@ export const cancelMCPOAuth = (serverName: string) => {
   return `${BASE_URL}/api/mcp/oauth/cancel/${serverName}`;
 };
 
-export const config = () => `/api/config`;
+export const config = () => `${BASE_URL}/api/config`;
 
-export const prompts = () => `/api/prompts`;
+export const prompts = () => `${BASE_URL}/api/prompts`;
 
 export const addPromptToGroup = (groupId: string) =>
-  `/api/prompts/groups/${groupId}/prompts`;
+  `${BASE_URL}/api/prompts/groups/${groupId}/prompts`;
 
 export const assistants = ({
   path = '',
@@ -208,7 +205,7 @@ export const assistants = ({
 };
 
 export const agents = ({ path = '', options }: { path?: string; options?: object }) => {
-  let url = `/api/agents`;
+  let url = `${BASE_URL}/api/agents`;
 
   if (path && path !== '') {
     url += `/${path}`;
@@ -224,13 +221,13 @@ export const agents = ({ path = '', options }: { path?: string; options?: object
 
 export const revertAgentVersion = (agent_id: string) => `${agents({ path: `${agent_id}/revert` })}`;
 
-export const files = () => `/api/files`;
-export const fileUpload = () => `/api/files`;
-export const fileDelete = () => `/api/files`;
+export const files = () => `${BASE_URL}/api/files`;
+export const fileUpload = () => `${BASE_URL}/api/files`;
+export const fileDelete = () => `${BASE_URL}/api/files`;
 export const fileDownload = (userId: string, fileId: string) =>
-  `/api/files/download/${userId}/${fileId}`;
-export const fileConfig = () => `/api/files/config`;
-export const agentFiles = (agentId: string) => `/api/files/agent/${agentId}`;
+  `${BASE_URL}/api/files/download/${userId}/${fileId}`;
+export const fileConfig = () => `${BASE_URL}/api/files/config`;
+export const agentFiles = (agentId: string) => `${BASE_URL}/api/files/agent/${agentId}`;
 
 export const images = () => `${files()}/images`;
 
@@ -287,12 +284,12 @@ export const deletePrompt = ({ _id, groupId }: { _id: string; groupId: string })
   return `${prompts()}/${_id}?groupId=${groupId}`;
 };
 
-export const getCategories = () => `/api/categories`;
+export const getCategories = () => `${BASE_URL}/api/categories`;
 
 export const getAllPromptGroups = () => `${prompts()}/all`;
 
 /* Roles */
-export const roles = () => `/api/roles`;
+export const roles = () => `${BASE_URL}/api/roles`;
 export const getRole = (roleName: string) => `${roles()}/${roleName.toLowerCase()}`;
 export const updatePromptPermissions = (roleName: string) => `${getRole(roleName)}/prompts`;
 export const updateMemoryPermissions = (roleName: string) => `${getRole(roleName)}/memories`;
@@ -315,24 +312,24 @@ export const conversationTagsList = (pageNumber: string, sort?: string, order?: 
 export const addTagToConversation = (conversationId: string) =>
   `${conversationTags()}/convo/${conversationId}`;
 
-export const userTerms = () => `/api/user/terms`;
-export const acceptUserTerms = () => `/api/user/terms/accept`;
-export const banner = () => `/api/banner`;
+export const userTerms = () => `${BASE_URL}/api/user/terms`;
+export const acceptUserTerms = () => `${BASE_URL}/api/user/terms/accept`;
+export const banner = () => `${BASE_URL}/api/banner`;
 
 // Message Feedback
 export const feedback = (conversationId: string, messageId: string) =>
   `${BASE_URL}/api/messages/${conversationId}/${messageId}/feedback`;
 
 // Two-Factor Endpoints
-export const enableTwoFactor = () => `/api/auth/2fa/enable`;
-export const verifyTwoFactor = () => `/api/auth/2fa/verify`;
-export const confirmTwoFactor = () => `/api/auth/2fa/confirm`;
-export const disableTwoFactor = () => `/api/auth/2fa/disable`;
-export const regenerateBackupCodes = () => `/api/auth/2fa/backup/regenerate`;
-export const verifyTwoFactorTemp = () => `/api/auth/2fa/verify-temp`;
+export const enableTwoFactor = () => `${BASE_URL}/api/auth/2fa/enable`;
+export const verifyTwoFactor = () => `${BASE_URL}/api/auth/2fa/verify`;
+export const confirmTwoFactor = () => `${BASE_URL}/api/auth/2fa/confirm`;
+export const disableTwoFactor = () => `${BASE_URL}/api/auth/2fa/disable`;
+export const regenerateBackupCodes = () => `${BASE_URL}/api/auth/2fa/backup/regenerate`;
+export const verifyTwoFactorTemp = () => `${BASE_URL}/api/auth/2fa/verify-temp`;
 
 /* Memories */
-export const memories = () => `/api/memories`;
+export const memories = () => `${BASE_URL}/api/memories`;
 export const memory = (key: string) => `${memories()}/${encodeURIComponent(key)}`;
 export const memoryPreferences = () => `${memories()}/preferences`;
 
