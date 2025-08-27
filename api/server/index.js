@@ -55,7 +55,20 @@ const startServer = async () => {
   const appConfig = await getAppConfig();
   await updateInterfacePermissions(appConfig);
   const indexPath = path.join(appConfig.paths.dist, 'index.html');
-  const indexHTML = fs.readFileSync(indexPath, 'utf8');
+  let indexHTML = fs.readFileSync(indexPath, 'utf8');
+
+  // In order to provide support to serving the application in a sub-directory
+  // We need to update the base href if the DOMAIN_CLIENT is specified and not the root path
+  if (process.env.DOMAIN_CLIENT) {
+    const clientUrl = new URL(process.env.DOMAIN_CLIENT);
+    const baseHref = clientUrl.pathname.endsWith('/')
+      ? clientUrl.pathname
+      : `${clientUrl.pathname}/`;
+    if (baseHref !== '/') {
+      logger.info(`Setting base href to ${baseHref}`);
+      indexHTML = indexHTML.replace(/base href="\/"/, `base href="${baseHref}"`);
+    }
+  }
 
   app.get('/health', (_req, res) => res.status(200).send('OK'));
 

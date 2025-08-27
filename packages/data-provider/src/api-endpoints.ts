@@ -54,8 +54,7 @@ export const messages = (params: q.MessagesListParams) => {
   const { conversationId, messageId, ...rest } = params;
 
   if (conversationId && messageId) {
-    return `${messagesRoot}/${conversationId}/${messageId}`;
-    return `${messagesRoot}/${conversationId}/${messageId}`;
+    return `/api/messages/${conversationId}/${messageId}`;
   }
 
   if (conversationId) {
@@ -64,13 +63,11 @@ export const messages = (params: q.MessagesListParams) => {
   }
 
   return `${messagesRoot}${buildQuery(rest)}`;
-  return `${messagesRoot}{buildQuery(rest)}`;
 };
 
 export const messagesArtifacts = (messageId: string) => `${messagesRoot}/artifacts/${messageId}`;
 
-const shareRoot = `${BASE_URL}/api/share`;
-
+const shareRoot = `/api/share`;
 export const shareMessages = (shareId: string) => `${shareRoot}/${shareId}`;
 export const getSharedLink = (conversationId: string) => `${shareRoot}/link/${conversationId}`;
 export const getSharedLinks = (
@@ -129,13 +126,11 @@ export const presets = () => `${BASE_URL}/api/presets`;
 
 export const deletePreset = () => `${BASE_URL}/api/presets/delete`;
 
-export const aiEndpoints = () => '/api/endpoints';
-
-export const models = () => '/api/models';
+export const aiEndpoints = () => `${BASE_URL}/api/endpoints`;
 
 export const models = () => `${BASE_URL}/api/models`;
 
-export const tokenizer = () => `${BASE_URL}/api/tokenizer`;
+export const tokenizer = () => `/api/tokenizer`;
 
 export const login = () => `${BASE_URL}/api/auth/login`;
 
@@ -161,9 +156,8 @@ export const resendVerificationEmail = () => `${BASE_URL}/api/user/verify/resend
 export const plugins = () => `${BASE_URL}/api/plugins`;
 
 export const mcpReinitialize = (serverName: string) =>
-  `${BASE_URL}/api/mcp/${serverName}/reinitialize`;
-export const mcpConnectionStatus = () => `${BASE_URL}/api/mcp/connection/status`;
-
+  `/api/mcp/${serverName}/reinitialize`;
+export const mcpConnectionStatus = () => `/api/mcp/connection/status`;
 export const mcpServerConnectionStatus = (serverName: string) =>
   `${BASE_URL}/api/mcp/connection/status/${serverName}`;
 
