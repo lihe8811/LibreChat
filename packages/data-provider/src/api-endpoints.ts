@@ -2,6 +2,21 @@ import type { AssistantsEndpoint } from './schemas';
 import * as q from './types/queries';
 import { ResourceType } from './accessPermissions';
 
+let BASE_URL = '';
+if (typeof process === 'undefined' || process.browser === true) {
+  // process is only available in node context, or process.browser is true in client-side code
+  // This is to ensure that the BASE_URL is set correctly based on the <base>
+  // element in the HTML document, if it exists.
+  const baseEl = document.querySelector('base');
+  BASE_URL = baseEl?.getAttribute('href') || '/';
+}
+
+if (BASE_URL && BASE_URL.endsWith('/')) {
+  BASE_URL = BASE_URL.slice(0, -1);
+}
+
+export const apiBaseUrl = () => BASE_URL;
+
 // Testing this buildQuery function
 const buildQuery = (params: Record<string, unknown>): string => {
   const query = Object.entries(params)
@@ -26,7 +41,7 @@ export const user = () => `/api/user`;
 
 export const balance = () => `/api/balance`;
 
-export const userPlugins = () => '/api/user/plugins';
+export const userPlugins = () => `${BASE_URL}/api/user/plugins`;
 
 export const deleteUser = () => `/api/user/delete`;
 
@@ -36,8 +51,7 @@ export const messages = (params: q.MessagesListParams) => {
   const { conversationId, messageId, ...rest } = params;
 
   if (conversationId && messageId) {
-    return `${messagesRoot}/${conversationId}/${messageId}`;
-    return `${messagesRoot}/${conversationId}/${messageId}`;
+    return `/api/messages/${conversationId}/${messageId}`;
   }
 
   if (conversationId) {
@@ -99,7 +113,7 @@ export const forkConversation = () => `${conversationsRoot}/fork`;
 export const duplicateConversation = () => `${conversationsRoot}/duplicate`;
 
 export const search = (q: string, cursor?: string | null) =>
-  `/api/search?q=${q}${cursor ? `&cursor=${cursor}` : ''}`;
+  `${BASE_URL}/api/search?q=${q}${cursor ? `&cursor=${cursor}` : ''}`;
 
 export const searchEnabled = () => `/api/search/enable`;
 
@@ -107,7 +121,7 @@ export const presets = () => `/api/presets`;
 
 export const deletePreset = () => `/api/presets/delete`;
 
-export const aiEndpoints = () => '/api/endpoints';
+export const aiEndpoints = () => `${BASE_URL}/api/endpoints`;
 
 export const tokenizer = () => `/api/tokenizer`;
 
@@ -122,7 +136,7 @@ export const loginFacebook = () => `/api/auth/facebook`;
 export const loginGoogle = () => `/api/auth/google`;
 
 export const refreshToken = (retry?: boolean) =>
-  `/api/auth/refresh${retry === true ? '?retry=true' : ''}`;
+  `${BASE_URL}/api/auth/refresh${retry === true ? '?retry=true' : ''}`;
 
 export const requestPasswordReset = () => `/api/auth/requestPasswordReset`;
 
@@ -138,13 +152,13 @@ export const mcpReinitialize = (serverName: string) =>
   `/api/mcp/${serverName}/reinitialize`;
 export const mcpConnectionStatus = () => `/api/mcp/connection/status`;
 export const mcpServerConnectionStatus = (serverName: string) =>
-  `/api/mcp/connection/status/${serverName}`;
+  `${BASE_URL}/api/mcp/connection/status/${serverName}`;
 export const mcpAuthValues = (serverName: string) => {
-  return `/api/mcp/${serverName}/auth-values`;
+  return `${BASE_URL}/api/mcp/${serverName}/auth-values`;
 };
 
 export const cancelMCPOAuth = (serverName: string) => {
-  return `/api/mcp/oauth/cancel/${serverName}`;
+  return `${BASE_URL}/api/mcp/oauth/cancel/${serverName}`;
 };
 
 export const config = () => `/api/config`;
@@ -167,7 +181,7 @@ export const assistants = ({
   version: number | string;
   isAvatar?: boolean;
 }) => {
-  let url = isAvatar === true ? `${images()}/assistants` : `/api/assistants/v${version}`;
+  let url = isAvatar === true ? `${images()}/assistants` : `${BASE_URL}/api/assistants/v${version}`;
 
   if (path && path !== '') {
     url += `/${path}`;
@@ -286,7 +300,7 @@ export const updateMarketplacePermissions = (roleName: string) =>
 
 /* Conversation Tags */
 export const conversationTags = (tag?: string) =>
-  `/api/tags${tag != null && tag ? `/${encodeURIComponent(tag)}` : ''}`;
+  `${BASE_URL}/api/tags${tag != null && tag ? `/${encodeURIComponent(tag)}` : ''}`;
 
 export const conversationTagsList = (pageNumber: string, sort?: string, order?: string) =>
   `${conversationTags()}/list?pageNumber=${pageNumber}${sort ? `&sort=${sort}` : ''}${
@@ -302,7 +316,7 @@ export const banner = () => `/api/banner`;
 
 // Message Feedback
 export const feedback = (conversationId: string, messageId: string) =>
-  `/api/messages/${conversationId}/${messageId}/feedback`;
+  `${BASE_URL}/api/messages/${conversationId}/${messageId}/feedback`;
 
 // Two-Factor Endpoints
 export const enableTwoFactor = () => `/api/auth/2fa/enable`;
@@ -319,7 +333,7 @@ export const memoryPreferences = () => `${memories()}/preferences`;
 
 export const searchPrincipals = (params: q.PrincipalSearchParams) => {
   const { q: query, limit, types } = params;
-  let url = `/api/permissions/search-principals?q=${encodeURIComponent(query)}`;
+  let url = `${BASE_URL}/api/permissions/search-principals?q=${encodeURIComponent(query)}`;
 
   if (limit !== undefined) {
     url += `&limit=${limit}`;
@@ -333,17 +347,17 @@ export const searchPrincipals = (params: q.PrincipalSearchParams) => {
 };
 
 export const getAccessRoles = (resourceType: ResourceType) =>
-  `/api/permissions/${resourceType}/roles`;
+  `${BASE_URL}/api/permissions/${resourceType}/roles`;
 
 export const getResourcePermissions = (resourceType: ResourceType, resourceId: string) =>
-  `/api/permissions/${resourceType}/${resourceId}`;
+  `${BASE_URL}/api/permissions/${resourceType}/${resourceId}`;
 
 export const updateResourcePermissions = (resourceType: ResourceType, resourceId: string) =>
-  `/api/permissions/${resourceType}/${resourceId}`;
+  `${BASE_URL}/api/permissions/${resourceType}/${resourceId}`;
 
 export const getEffectivePermissions = (resourceType: ResourceType, resourceId: string) =>
-  `/api/permissions/${resourceType}/${resourceId}/effective`;
+  `${BASE_URL}/api/permissions/${resourceType}/${resourceId}/effective`;
 
 // SharePoint Graph API Token
 export const graphToken = (scopes: string) =>
-  `/api/auth/graph-token?scopes=${encodeURIComponent(scopes)}`;
+  `${BASE_URL}/api/auth/graph-token?scopes=${encodeURIComponent(scopes)}`;
