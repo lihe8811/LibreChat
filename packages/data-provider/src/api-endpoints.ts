@@ -3,7 +3,7 @@ import * as q from './types/queries';
 import { ResourceType } from './accessPermissions';
 
 let BASE_URL = '';
-if (typeof process === 'undefined' || process?.browser === true) {
+if (typeof process === 'undefined' || process.browser === true) {
   // process is only available in node context, or process.browser is true in client-side code
   // This is to ensure that the BASE_URL is set correctly based on the <base>
   // element in the HTML document, if it exists.
@@ -52,6 +52,7 @@ export const messages = (params: q.MessagesListParams) => {
 
   if (conversationId && messageId) {
     return `${messagesRoot}/${conversationId}/${messageId}`;
+    return `${messagesRoot}/${conversationId}/${messageId}`;
   }
 
   if (conversationId) {
@@ -59,6 +60,7 @@ export const messages = (params: q.MessagesListParams) => {
   }
 
   return `${messagesRoot}${buildQuery(rest)}`;
+  return `${messagesRoot}{buildQuery(rest)}`;
 };
 
 export const messagesArtifacts = (messageId: string) => `${messagesRoot}/artifacts/${messageId}`;
@@ -121,7 +123,9 @@ export const presets = () => `${BASE_URL}/api/presets`;
 
 export const deletePreset = () => `${BASE_URL}/api/presets/delete`;
 
-export const aiEndpoints = () => '/api/endpoints';
+export const aiEndpoints = () => `${BASE_URL}/api/endpoints`;
+
+export const models = () => `${BASE_URL}/api/models`;
 
 export const tokenizer = () => `${BASE_URL}/api/tokenizer`;
 
