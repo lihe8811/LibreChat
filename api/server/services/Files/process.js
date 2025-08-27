@@ -17,7 +17,8 @@ const {
   isAssistantsEndpoint,
 } = require('librechat-data-provider');
 const { EnvVar } = require('@librechat/agents');
-const { sanitizeFilename } = require('@librechat/api');
+const { logger } = require('@librechat/data-schemas');
+const { sanitizeFilename, parseText, processAudioFile } = require('@librechat/api');
 const {
   convertImage,
   resizeAndConvert,
@@ -565,38 +566,30 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     }
     // Note: File search processing continues to dual storage logic below
   } else if (tool_resource === EToolResources.ocr) {
-    const isOCREnabled = await checkCapability(req, AgentCapabilities.ocr);
-    if (!isOCREnabled) {
-      throw new Error('OCR capability is not enabled for Agents');
-    }
-
-    const { handleFileUpload: uploadOCR } = getStrategyFunctions(
-      appConfig?.ocr?.strategy ?? FileSources.mistral_ocr,
-    );
     const { file_id, temp_file_id = null } = metadata;
 
-    const {
-      text,
-      bytes,
-      // TODO: OCR images support?
-      images: _i,
-      filename,
-      filepath: ocrFileURL,
-    } = await uploadOCR({ req, appConfig, file, loadAuthValues });
-
-    const fileInfo = removeNullishValues({
-      text,
-      bytes,
-      file_id,
-      temp_file_id,
-      user: req.user.id,
-      type: 'text/plain',
-      filepath: ocrFileURL,
-      source: FileSources.text,
-      filename: filename ?? file.originalname,
-      model: messageAttachment ? undefined : req.body.model,
-      context: messageAttachment ? FileContext.message_attachment : FileContext.agents,
-    });
+    /**
+     * @param {object} params
+     * @param {string} params.text
+     * @param {number} params.bytes
+     * @param {string} params.filepath
+     * @param {string} params.type
+     * @return {Promise<void>}
+     */
+    const createTextFile = async ({ text, bytes, filepath, type = 'text/plain' }) => {
+      const fileInfo = removeNullishValues({
+        text,
+        bytes,
+        file_id,
+        temp_file_id,
+        user: req.user.id,
+        type,
+        filepath: filepath ?? file.path,
+        source: FileSources.text,
+        filename: file.originalname,
+        model: messageAttachment ? undefined : req.body.model,
+        context: messageAttachment ? FileContext.message_attachment : FileContext.agents,
+      });
 
       if (!messageAttachment && tool_resource) {
         await addAgentResourceFile({
