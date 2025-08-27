@@ -22,7 +22,7 @@ import type {
 } from 'librechat-data-provider';
 import useBuildMessageTree from '~/hooks/Messages/useBuildMessageTree';
 import { useScreenshot } from '~/hooks/ScreenshotContext';
-import { cleanupPreset, buildTree } from '~/utils';
+import { cleanupPreset } from '~/utils';
 
 type ExportValues = {
   fieldName: string;
