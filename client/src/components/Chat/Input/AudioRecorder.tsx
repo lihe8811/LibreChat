@@ -22,6 +22,8 @@ export default function AudioRecorder({
   const { setValue, reset, getValues } = methods;
   const localize = useLocalize();
   const { showToast } = useToastContext();
+  const { speechToTextEndpoint } = useGetAudioSettings();
+
   const existingTextRef = useRef<string>('');
 
   const onTranscriptionComplete = useCallback(
@@ -54,13 +56,19 @@ export default function AudioRecorder({
 
   const setText = useCallback(
     (text: string) => {
-      /** The transcript is cumulative, so we only need to prepend the existing text once */
-      const newText = existingTextRef.current ? `${existingTextRef.current} ${text}` : text;
+      let newText = text;
+      if (isExternalSTT(speechToTextEndpoint)) {
+        /** For external STT, the text comes as a complete transcription, so append to existing */
+        newText = existingTextRef.current ? `${existingTextRef.current} ${text}` : text;
+      } else {
+        /** For browser STT, the transcript is cumulative, so we only need to prepend the existing text once */
+        newText = existingTextRef.current ? `${existingTextRef.current} ${text}` : text;
+      }
       setValue('text', newText, {
         shouldValidate: true,
       });
     },
-    [setValue],
+    [setValue, speechToTextEndpoint],
   );
 
   const { isListening, isLoading, startRecording, stopRecording } = useSpeechToText(
@@ -79,7 +87,10 @@ export default function AudioRecorder({
 
   const handleStopRecording = async () => {
     stopRecording();
-    existingTextRef.current = '';
+    /** For browser STT, clear the reference since text was already being updated */
+    if (!isExternalSTT(speechToTextEndpoint)) {
+      existingTextRef.current = '';
+    }
   };
 
   const renderIcon = () => {

@@ -290,12 +290,14 @@ class TTSService {
       return res.status(400).send('Missing text in request body');
     }
 
-    const appConfig = await getAppConfig({
-      role: req.user?.role,
-    });
+    const appConfig =
+      req.config ??
+      (await getAppConfig({
+        role: req.user?.role,
+      }));
     try {
       res.setHeader('Content-Type', 'audio/mpeg');
-      const provider = this.getProvider();
+      const provider = this.getProvider(appConfig);
       const ttsSchema = appConfig?.speech?.tts?.[provider];
       const voice = await this.getVoice(ttsSchema, requestVoice);
 
