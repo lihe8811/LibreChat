@@ -1,15 +1,19 @@
 const undici = require('undici');
 const fetch = require('node-fetch');
 const passport = require('passport');
-// Import these dynamically later
-// const client = require('openid-client');
-// const { Strategy: OpenIDStrategy } = require('openid-client/passport');
+const client = require('openid-client');
 const jwtDecode = require('jsonwebtoken/decode');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { hashToken, logger } = require('@librechat/data-schemas');
 const { CacheKeys, ErrorTypes } = require('librechat-data-provider');
 const { Strategy: OpenIDStrategy } = require('openid-client/passport');
-const { isEnabled, logHeaders, safeStringify, getBalanceConfig } = require('@librechat/api');
+const {
+  isEnabled,
+  logHeaders,
+  safeStringify,
+  findOpenIDUser,
+  getBalanceConfig,
+} = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { findUser, createUser, updateUser } = require('~/models');
 const { getAppConfig } = require('~/server/services/Config');
@@ -472,7 +476,6 @@ async function setupOpenId() {
     return null;
   }
 }
-
 /**
  * @function getOpenIdConfig
  * @description Returns the OpenID client instance.

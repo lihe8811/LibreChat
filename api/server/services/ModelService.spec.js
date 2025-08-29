@@ -141,7 +141,7 @@ describe('getOpenAIModels', () => {
 
   it('returns default models when no environment configurations are provided (and fetch fails)', async () => {
     const models = await getOpenAIModels({ user: 'user456' });
-    expect(models).toContain('gpt-4');
+    expect(models).toContain('gpt-5');
   });
 
   it('returns `AZURE_OPENAI_MODELS` with `azure` flag (and fetch fails)', async () => {

@@ -10,8 +10,10 @@ const {
   // Basic Tools
   GoogleSearchAPI,
   // Structured Tools
+  DALLE3,
   FluxAPI,
   OpenWeather,
+  StructuredSD,
   StructuredACS,
   TraversaalSearch,
   StructuredWolfram,
@@ -157,6 +159,7 @@ const loadTools = async ({
     google: GoogleSearchAPI,
     open_weather: OpenWeather,
     wolfram: StructuredWolfram,
+    'stable-diffusion': StructuredSD,
     'azure-ai-search': StructuredACS,
     traversaal_search: TraversaalSearch,
     tavily_search_results_json: TavilySearchResults,
@@ -212,47 +215,13 @@ const loadTools = async ({
         imageFiles,
       });
     },
-    flux: async (toolContextMap) => {
-      const authFields = getAuthFields('flux');
-      const authValues = await loadAuthValues({ userId: user, authFields });
-      
-      // Get image files for editing if available
-      const imageFiles = options.tool_resources?.[EToolResources.image_edit]?.files ?? [];
-      
-      // Create context for image files if they exist
-      let toolContext = '';
-      if (imageFiles.length > 0) {
-        toolContext = 'Image files provided in this request (their image IDs listed in order of appearance) available for image editing with Flux Kontext Pro:';
-        toolContext += `\n\t- ${imageFiles[0].file_id}`;
-        
-        toolContext += `\n\nInclude any you need in the \`imageFile\` when calling \`flux\` with action="edit". Note that Flux Kontext Pro only supports editing one image at a time.`;
-        toolContext += `\n\nFor image generation, use action="generate" (default) and provide a detailed prompt.`;
-      } else {
-        toolContext = `# \`flux\`:
-1. Use this tool to generate or edit images with Flux Kontext Pro.
-2. For generation, provide a detailed text prompt describing the image you want.
-3. For editing, provide image_ids and a text prompt describing the changes you want.
-4. Be specific and detailed in your prompt for best results.
-5. The image will be displayed in the chat.`;
-      }
-      
-      toolContextMap.flux = toolContext;
-      
-      return new FluxAPI({
-        ...authValues,
-        userId: user,
-        fileStrategy: options.fileStrategy,
-        isAgent: !!agent,
-        returnMetadata: options.returnMetadata,
-        processFileURL: options.processFileURL,
-        req: options.req,
-        imageFile: imageFiles.length > 0 ? imageFiles[0] : null,
-        ...toolOptions.flux,
-      });
-    },
   };
 
   const requestedTools = {};
+
+  if (functions === true) {
+    toolConstructors.dalle = DALLE3;
+  }
 
   /** @type {ImageGenOptions} */
   const imageGenOptions = {
@@ -266,6 +235,8 @@ const loadTools = async ({
 
   const toolOptions = {
     flux: imageGenOptions,
+    dalle: imageGenOptions,
+    'stable-diffusion': imageGenOptions,
     serpapi: { location: 'Austin,Texas,United States', hl: 'en', gl: 'us' },
   };
 

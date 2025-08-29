@@ -36,17 +36,17 @@ const { Calculator } = require('@langchain/community/tools/calculator');
 const { User } = require('~/db/models');
 const PluginService = require('~/server/services/PluginService');
 const { validateTools, loadTools, loadToolWithAuth } = require('./handleTools');
-const { availableTools } = require('../');
+const { StructuredSD, availableTools, DALLE3 } = require('../');
 
 describe('Tool Handlers', () => {
   let mongoServer;
   let fakeUser;
-  const pluginKey = 'calculator';
+  const pluginKey = 'dalle';
   const pluginKey2 = 'wolfram';
-  const ToolClass = Calculator;
+  const ToolClass = DALLE3;
   const initialTools = [pluginKey, pluginKey2];
   const mockCredential = 'mock-credential';
-  const mainPlugin = availableTools.find((tool) => tool.pluginKey === pluginKey2);
+  const mainPlugin = availableTools.find((tool) => tool.pluginKey === pluginKey);
   const authConfigs = mainPlugin.authConfig;
 
   beforeAll(async () => {
@@ -86,7 +86,7 @@ describe('Tool Handlers', () => {
       await PluginService.updateUserPluginAuth(
         fakeUser._id,
         authConfig.authField,
-        pluginKey2,
+        pluginKey,
         mockCredential,
       );
     }
@@ -120,7 +120,7 @@ describe('Tool Handlers', () => {
       await PluginService.updateUserPluginAuth(
         fakeUser._id,
         authConfig.authField,
-        pluginKey2,
+        pluginKey,
         mockCredential,
       );
     }
@@ -163,7 +163,7 @@ describe('Tool Handlers', () => {
     let loadTool1;
     let loadTool2;
     let loadTool3;
-    const sampleTools = [...initialTools, 'google'];
+    const sampleTools = [...initialTools, 'calculator'];
     let ToolClass2 = Calculator;
     let remainingTools = availableTools.filter(
       (tool) => sampleTools.indexOf(tool.pluginKey) === -1,
@@ -208,14 +208,14 @@ describe('Tool Handlers', () => {
       const authTool = await loadTool1();
       const tool = await loadTool3();
       expect(authTool).toBeInstanceOf(ToolClass);
-      expect(tool).toBeDefined();
+      expect(tool).toBeInstanceOf(ToolClass2);
     });
 
     it('should initialize an authenticated tool with primary auth field', async () => {
-      process.env.GOOGLE_API_KEY = 'mocked_api_key';
+      process.env.DALLE3_API_KEY = 'mocked_api_key';
       const initToolFunction = loadToolWithAuth(
         'userId',
-        ['GOOGLE_API_KEY'],
+        ['DALLE3_API_KEY||DALLE_API_KEY'],
         ToolClass,
       );
       const authTool = await initToolFunction();
@@ -224,17 +224,36 @@ describe('Tool Handlers', () => {
       expect(mockPluginService.getUserPluginAuthValue).not.toHaveBeenCalled();
     });
 
-    it('should fallback to getUserPluginAuthValue when env vars are missing', async () => {
-      mockPluginService.updateUserPluginAuth('userId', 'GOOGLE_API_KEY', 'google', 'mocked_api_key');
+    it('should initialize an authenticated tool with alternate auth field when primary is missing', async () => {
+      delete process.env.DALLE3_API_KEY; // Ensure the primary key is not set
+      process.env.DALLE_API_KEY = 'mocked_alternate_api_key';
       const initToolFunction = loadToolWithAuth(
         'userId',
-        ['GOOGLE_API_KEY'],
+        ['DALLE3_API_KEY||DALLE_API_KEY'],
         ToolClass,
       );
       const authTool = await initToolFunction();
 
       expect(authTool).toBeInstanceOf(ToolClass);
       expect(mockPluginService.getUserPluginAuthValue).toHaveBeenCalledTimes(1);
+      expect(mockPluginService.getUserPluginAuthValue).toHaveBeenCalledWith(
+        'userId',
+        'DALLE3_API_KEY',
+        true,
+      );
+    });
+
+    it('should fallback to getUserPluginAuthValue when env vars are missing', async () => {
+      mockPluginService.updateUserPluginAuth('userId', 'DALLE_API_KEY', 'dalle', 'mocked_api_key');
+      const initToolFunction = loadToolWithAuth(
+        'userId',
+        ['DALLE3_API_KEY||DALLE_API_KEY'],
+        ToolClass,
+      );
+      const authTool = await initToolFunction();
+
+      expect(authTool).toBeInstanceOf(ToolClass);
+      expect(mockPluginService.getUserPluginAuthValue).toHaveBeenCalledTimes(2);
     });
 
     it('should throw an error for an unauthenticated tool', async () => {
@@ -244,7 +263,6 @@ describe('Tool Handlers', () => {
         expect(error).toBeDefined();
       }
     });
-    
     it('returns an empty object when no tools are requested', async () => {
       toolFunctions = await loadTools({
         user: fakeUser._id,
@@ -254,20 +272,19 @@ describe('Tool Handlers', () => {
       });
       expect(toolFunctions).toEqual({});
     });
-    
-    it('should return the Tool version when using functions', async () => {
-      process.env.GOOGLE_API_KEY = mockCredential;
+    it('should return the StructuredTool version when using functions', async () => {
+      process.env.SD_WEBUI_URL = mockCredential;
       toolFunctions = await loadTools({
         user: fakeUser._id,
         model: BaseLLM,
-        tools: ['calculator'],
+        tools: ['stable-diffusion'],
         functions: true,
         returnMap: true,
         useSpecs: true,
       });
-      const calculatorTool = await toolFunctions['calculator']();
-      expect(calculatorTool).toBeInstanceOf(Calculator);
-      delete process.env.GOOGLE_API_KEY;
+      const structuredTool = await toolFunctions['stable-diffusion']();
+      expect(structuredTool).toBeInstanceOf(StructuredSD);
+      delete process.env.SD_WEBUI_URL;
     });
   });
 });

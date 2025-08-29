@@ -92,7 +92,7 @@ u7wlOSk+oFzDIO/UILIA
   it('should throw an error if SAML_CERT is not set', () => {
     process.env.SAML_CERT;
     expect(() => getCertificateContent(process.env.SAML_CERT)).toThrow(
-      'Invalid input: SAML_CERT must be a string.',
+      'Invalid cert: SAML_CERT must be a valid file path or certificate string.',
     );
   });
 
