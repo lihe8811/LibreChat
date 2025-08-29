@@ -15,15 +15,12 @@ const { connectDb, indexSync } = require('~/db');
 const validateImageRequest = require('./middleware/validateImageRequest');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
 const { updateInterfacePermissions } = require('~/models/interface');
-const { updateInterfacePermissions } = require('~/models/interface');
 const { checkMigrations } = require('./services/start/migration');
 const initializeMCPs = require('./services/initializeMCPs');
 const configureSocialLogins = require('./socialLogins');
 const { getAppConfig } = require('./services/Config');
-const { getAppConfig } = require('./services/Config');
 const staticCache = require('./utils/staticCache');
 const noIndex = require('./middleware/noIndex');
-const { seedDatabase } = require('~/models');
 const { seedDatabase } = require('~/models');
 const routes = require('./routes');
 
@@ -86,9 +83,6 @@ const startServer = async () => {
     console.warn('Response compression has been disabled via DISABLE_COMPRESSION.');
   }
 
-  app.use(staticCache(appConfig.paths.dist));
-  app.use(staticCache(appConfig.paths.fonts));
-  app.use(staticCache(appConfig.paths.assets));
   app.use(staticCache(appConfig.paths.dist));
   app.use(staticCache(appConfig.paths.fonts));
   app.use(staticCache(appConfig.paths.assets));
@@ -169,7 +163,6 @@ const startServer = async () => {
       logger.info(`Server listening at http://${host == '0.0.0.0' ? 'localhost' : host}:${port}`);
     }
 
-    initializeMCPs().then(() => checkMigrations());
     initializeMCPs().then(() => checkMigrations());
   });
 };
