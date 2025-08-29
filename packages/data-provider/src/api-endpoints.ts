@@ -54,11 +54,10 @@ export const messages = (params: q.MessagesListParams) => {
   const { conversationId, messageId, ...rest } = params;
 
   if (conversationId && messageId) {
-    return `/api/messages/${conversationId}/${messageId}`;
+    return `${messagesRoot}/${conversationId}/${messageId}`;
   }
 
   if (conversationId) {
-    return `${messagesRoot}/${conversationId}`;
     return `${messagesRoot}/${conversationId}`;
   }
 
@@ -67,7 +66,7 @@ export const messages = (params: q.MessagesListParams) => {
 
 export const messagesArtifacts = (messageId: string) => `${messagesRoot}/artifacts/${messageId}`;
 
-const shareRoot = `/api/share`;
+const shareRoot = `${BASE_URL}/api/share`;
 export const shareMessages = (shareId: string) => `${shareRoot}/${shareId}`;
 export const getSharedLink = (conversationId: string) => `${shareRoot}/link/${conversationId}`;
 export const getSharedLinks = (
@@ -118,7 +117,6 @@ export const duplicateConversation = () => `${conversationsRoot}/duplicate`;
 
 export const search = (q: string, cursor?: string | null) =>
   `${BASE_URL}/api/search?q=${q}${cursor ? `&cursor=${cursor}` : ''}`;
-  `${BASE_URL}/api/search?q=${q}${cursor ? `&cursor=${cursor}` : ''}`;
 
 export const searchEnabled = () => `${BASE_URL}/api/search/enable`;
 
@@ -130,7 +128,7 @@ export const aiEndpoints = () => `${BASE_URL}/api/endpoints`;
 
 export const models = () => `${BASE_URL}/api/models`;
 
-export const tokenizer = () => `/api/tokenizer`;
+export const tokenizer = () => `${BASE_URL}/api/tokenizer`;
 
 export const login = () => `${BASE_URL}/api/auth/login`;
 
@@ -156,11 +154,10 @@ export const resendVerificationEmail = () => `${BASE_URL}/api/user/verify/resend
 export const plugins = () => `${BASE_URL}/api/plugins`;
 
 export const mcpReinitialize = (serverName: string) =>
-  `/api/mcp/${serverName}/reinitialize`;
-export const mcpConnectionStatus = () => `/api/mcp/connection/status`;
+  `${BASE_URL}/api/mcp/${serverName}/reinitialize`;
+export const mcpConnectionStatus = () => `${BASE_URL}/api/mcp/connection/status`;
 export const mcpServerConnectionStatus = (serverName: string) =>
   `${BASE_URL}/api/mcp/connection/status/${serverName}`;
-
 export const mcpAuthValues = (serverName: string) => {
   return `${BASE_URL}/api/mcp/${serverName}/auth-values`;
 };
@@ -308,7 +305,6 @@ export const updateMarketplacePermissions = (roleName: string) =>
 
 /* Conversation Tags */
 export const conversationTags = (tag?: string) =>
-  `${BASE_URL}/api/tags${tag != null && tag ? `/${encodeURIComponent(tag)}` : ''}`;
   `${BASE_URL}/api/tags${tag != null && tag ? `/${encodeURIComponent(tag)}` : ''}`;
 
 export const conversationTagsList = (pageNumber: string, sort?: string, order?: string) =>

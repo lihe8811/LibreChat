@@ -3,8 +3,6 @@ import { useToastContext } from '@librechat/client';
 import { EToolResources } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import { useDeleteFilesMutation } from '~/data-provider';
-import { useToastContext } from '~/Providers';
-import { useLocalize } from '~/hooks';
 import { useFileDeletion } from '~/hooks/Files';
 import FileContainer from './FileContainer';
 import { useLocalize } from '~/hooks';
@@ -61,10 +59,12 @@ export default function FileRow({
 
   useEffect(() => {
     if (files.length === 0) {
+      setFilesLoading(false);
       return;
     }
 
     if (files.some((file) => file.progress < 1)) {
+      setFilesLoading(true);
       return;
     }
 
