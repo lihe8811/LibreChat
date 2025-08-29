@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useEffect, useCallback, useRef, memo } from 'react';
 import { AutoSizer, List as VirtualList, WindowScroller } from 'react-virtualized';
 import { throttle } from 'lodash';
 import { Spinner } from '@librechat/client';
@@ -111,19 +111,21 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
   }, [scrollElement, hasNextPage, isFetchingNextPage, isFetching, fetchNextPage, category]);
 
   // Separate effect for list re-rendering on data changes
+  // Only update when the length changes to avoid unnecessary updates
+  const agentsLength = currentAgents.length;
   useEffect(() => {
     if (listRef.current) {
       listRef.current.forceUpdateGrid();
     }
-  }, [currentAgents]);
+  }, [agentsLength]);
 
-  // Helper functions for grid calculations
-  const getCardsPerRow = useCallback((width: number) => {
-    return width >= 768 ? CARDS_PER_ROW_DESKTOP : CARDS_PER_ROW_MOBILE;
+  // Helper functions for grid calculations - memoized for better performance
+  const getCardsPerRow = useMemo(() => {
+    return (width: number) => (width >= 768 ? CARDS_PER_ROW_DESKTOP : CARDS_PER_ROW_MOBILE);
   }, []);
 
-  const getRowCount = useCallback((agentCount: number, cardsPerRow: number) => {
-    return Math.ceil(agentCount / cardsPerRow);
+  const getRowCount = useMemo(() => {
+    return (agentCount: number, cardsPerRow: number) => Math.ceil(agentCount / cardsPerRow);
   }, []);
 
   const getRowItems = useCallback(
@@ -151,6 +153,20 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
     return categoryValue.charAt(0).toUpperCase() + categoryValue.slice(1);
   };
 
+  // Memoized agent card to prevent unnecessary re-renders
+  const MemoizedAgentCard = memo(AgentCard);
+
+  // Pre-create select agent handlers for each agent to avoid recreating in render
+  const selectAgentHandlers = useMemo(() => {
+    const handlers: Record<string, () => void> = {};
+    currentAgents.forEach((agent) => {
+      if (agent.id) {
+        handlers[agent.id] = () => onSelectAgent(agent);
+      }
+    });
+    return handlers;
+  }, [currentAgents, onSelectAgent]);
+
   // Row renderer for virtual list
   const rowRenderer = useCallback(
     ({ index, key, style, parent }: any) => {
@@ -161,21 +177,22 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
       const isLastRow = index === totalRows - 1;
       const showLoading = isFetchingNextPage && isLastRow;
 
+      // Pre-calculate grid class to avoid recalculation during render
+      const gridClass = cn(
+        'grid gap-6 px-0',
+        cardsPerRow === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2',
+      );
+
       return (
         <div key={key} style={style}>
-          <div
-            className={cn(
-              'grid gap-6 px-0',
-              cardsPerRow === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2',
-            )}
-            role="row"
-            aria-rowindex={index + 1}
-          >
+          <div className={gridClass} role="row" aria-rowindex={index + 1}>
             {rowAgents.map((agent: t.Agent, cardIndex: number) => {
               const globalIndex = index * cardsPerRow + cardIndex;
+              const agentId = agent.id || `unknown-${globalIndex}`;
+              const handleClick = selectAgentHandlers[agentId] || (() => onSelectAgent(agent));
               return (
-                <div key={`${agent.id}-${globalIndex}`} role="gridcell">
-                  <AgentCard agent={agent} onClick={() => onSelectAgent(agent)} />
+                <div key={`${agentId}-${globalIndex}`} role="gridcell">
+                  <MemoizedAgentCard agent={agent} onClick={handleClick} />
                 </div>
               );
             })}
@@ -203,6 +220,8 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
       isFetchingNextPage,
       localize,
       onSelectAgent,
+      selectAgentHandlers,
+      MemoizedAgentCard,
     ],
   );
 
@@ -281,8 +300,14 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
                   const cardsPerRow = getCardsPerRow(width);
                   const rowCount = getRowCount(currentAgents.length, cardsPerRow);
 
+                  // Create a ref forwarding function to handle type conversion
+                  const setRef = (element: HTMLDivElement | null) => {
+                    // Call registerChild with the element
+                    registerChild(element);
+                  };
+
                   return (
-                    <div ref={registerChild}>
+                    <div ref={setRef}>
                       <VirtualList
                         ref={listRef}
                         autoHeight
@@ -345,4 +370,5 @@ const VirtualizedAgentGrid: React.FC<VirtualizedAgentGridProps> = ({
   );
 };
 
-export default VirtualizedAgentGrid;
+// Export memoized component to prevent unnecessary re-renders
+export default memo(VirtualizedAgentGrid);
