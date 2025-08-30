@@ -17,17 +17,6 @@ jest.mock('~/server/services/Config', () => ({
     filteredTools: [],
     includedTools: [],
   }),
-  getCachedTools: jest.fn().mockResolvedValue({
-    // Default cached tools for tests
-    dalle: {
-      type: 'function',
-      function: {
-        name: 'dalle',
-        description: 'DALL-E image generation',
-        parameters: {},
-      },
-    },
-  }),
 }));
 
 const { BaseLLM } = require('@langchain/openai');
@@ -35,15 +24,14 @@ const { Calculator } = require('@langchain/community/tools/calculator');
 
 const { User } = require('~/db/models');
 const PluginService = require('~/server/services/PluginService');
-const { validateTools, loadTools, loadToolWithAuth } = require('./handleTools');
-const { StructuredSD, availableTools, DALLE3 } = require('../');
+const { validateTools, loadTools } = require('./handleTools');
+const { availableTools } = require('../');
 
 describe('Tool Handlers', () => {
   let mongoServer;
   let fakeUser;
   const pluginKey = 'dalle';
   const pluginKey2 = 'wolfram';
-  const ToolClass = DALLE3;
   const initialTools = [pluginKey, pluginKey2];
   const mockCredential = 'mock-credential';
   const mainPlugin = availableTools.find((tool) => tool.pluginKey === pluginKey);
@@ -164,7 +152,6 @@ describe('Tool Handlers', () => {
     let loadTool2;
     let loadTool3;
     const sampleTools = [...initialTools, 'calculator'];
-    let ToolClass2 = Calculator;
     let remainingTools = availableTools.filter(
       (tool) => sampleTools.indexOf(tool.pluginKey) === -1,
     );
@@ -204,58 +191,6 @@ describe('Tool Handlers', () => {
       }
     });
 
-    it('should initialize an authenticated tool or one without authentication', async () => {
-      const authTool = await loadTool1();
-      const tool = await loadTool3();
-      expect(authTool).toBeInstanceOf(ToolClass);
-      expect(tool).toBeInstanceOf(ToolClass2);
-    });
-
-    it('should initialize an authenticated tool with primary auth field', async () => {
-      process.env.DALLE3_API_KEY = 'mocked_api_key';
-      const initToolFunction = loadToolWithAuth(
-        'userId',
-        ['DALLE3_API_KEY||DALLE_API_KEY'],
-        ToolClass,
-      );
-      const authTool = await initToolFunction();
-
-      expect(authTool).toBeInstanceOf(ToolClass);
-      expect(mockPluginService.getUserPluginAuthValue).not.toHaveBeenCalled();
-    });
-
-    it('should initialize an authenticated tool with alternate auth field when primary is missing', async () => {
-      delete process.env.DALLE3_API_KEY; // Ensure the primary key is not set
-      process.env.DALLE_API_KEY = 'mocked_alternate_api_key';
-      const initToolFunction = loadToolWithAuth(
-        'userId',
-        ['DALLE3_API_KEY||DALLE_API_KEY'],
-        ToolClass,
-      );
-      const authTool = await initToolFunction();
-
-      expect(authTool).toBeInstanceOf(ToolClass);
-      expect(mockPluginService.getUserPluginAuthValue).toHaveBeenCalledTimes(1);
-      expect(mockPluginService.getUserPluginAuthValue).toHaveBeenCalledWith(
-        'userId',
-        'DALLE3_API_KEY',
-        true,
-      );
-    });
-
-    it('should fallback to getUserPluginAuthValue when env vars are missing', async () => {
-      mockPluginService.updateUserPluginAuth('userId', 'DALLE_API_KEY', 'dalle', 'mocked_api_key');
-      const initToolFunction = loadToolWithAuth(
-        'userId',
-        ['DALLE3_API_KEY||DALLE_API_KEY'],
-        ToolClass,
-      );
-      const authTool = await initToolFunction();
-
-      expect(authTool).toBeInstanceOf(ToolClass);
-      expect(mockPluginService.getUserPluginAuthValue).toHaveBeenCalledTimes(2);
-    });
-
     it('should throw an error for an unauthenticated tool', async () => {
       try {
         await loadTool2();
@@ -271,20 +206,6 @@ describe('Tool Handlers', () => {
         useSpecs: true,
       });
       expect(toolFunctions).toEqual({});
-    });
-    it('should return the StructuredTool version when using functions', async () => {
-      process.env.SD_WEBUI_URL = mockCredential;
-      toolFunctions = await loadTools({
-        user: fakeUser._id,
-        model: BaseLLM,
-        tools: ['stable-diffusion'],
-        functions: true,
-        returnMap: true,
-        useSpecs: true,
-      });
-      const structuredTool = await toolFunctions['stable-diffusion']();
-      expect(structuredTool).toBeInstanceOf(StructuredSD);
-      delete process.env.SD_WEBUI_URL;
     });
   });
 });

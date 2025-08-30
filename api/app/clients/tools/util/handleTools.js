@@ -10,10 +10,8 @@ const {
   // Basic Tools
   GoogleSearchAPI,
   // Structured Tools
-  DALLE3,
   FluxAPI,
   OpenWeather,
-  StructuredSD,
   StructuredACS,
   TraversaalSearch,
   StructuredWolfram,
@@ -159,7 +157,6 @@ const loadTools = async ({
     google: GoogleSearchAPI,
     open_weather: OpenWeather,
     wolfram: StructuredWolfram,
-    'stable-diffusion': StructuredSD,
     'azure-ai-search': StructuredACS,
     traversaal_search: TraversaalSearch,
     tavily_search_results_json: TavilySearchResults,
@@ -218,10 +215,6 @@ const loadTools = async ({
   };
 
   const requestedTools = {};
-
-  if (functions === true) {
-    toolConstructors.dalle = DALLE3;
-  }
 
   /** @type {ImageGenOptions} */
   const imageGenOptions = {
