@@ -220,6 +220,7 @@ const loadTools = async ({
         imageFiles,
       });
     },
+<<<<<<< HEAD
     gemini_image_gen: async (toolContextMap) => {
       const authFields = getAuthFields('gemini_image_gen');
       const authValues = await loadAuthValues({ userId: user, authFields });
@@ -252,6 +253,8 @@ const loadTools = async ({
         fileStrategy: options.fileStrategy,
       });
     },
+=======
+>>>>>>> 2965f56bd (📎 feat: Support Flux Kontext model)
     flux: async (toolContextMap) => {
       const authFields = getAuthFields('flux');
       const authValues = await loadAuthValues({ userId: user, authFields });
