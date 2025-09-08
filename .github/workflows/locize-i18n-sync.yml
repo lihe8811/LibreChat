@@ -57,12 +57,12 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           sign-commits: true
           commit-message: "🌍 i18n: Update translation.json with latest translations"
           base: main
           branch: i18n/locize-translation-update
-          reviewers: danny-avila
+          reviewers: lihe8811
           title: "🌍 i18n: Update translation.json with latest translations"
           body: |
             **Description**:

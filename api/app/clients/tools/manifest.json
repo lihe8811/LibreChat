@@ -169,8 +169,8 @@
   {
     "name": "Flux",
     "pluginKey": "flux",
-    "description": "Generate images using text with the Flux API.",
-    "icon": "https://blackforestlabs.ai/wp-content/uploads/2024/07/bfl_logo_retraced_blk.png",
+    "description": "Image Generation and Editing using Flux's latest state-of-the-art models",
+    "icon": "https://mintlify.s3.us-west-1.amazonaws.com/bfl/logo/logo_light.png",
     "isAuthRequired": "true",
     "authConfig": [
       {
