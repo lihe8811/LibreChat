@@ -41,10 +41,10 @@ export default defineConfig(({ command }) => ({
       workbox: {
         globPatterns: [
           '**/*.{js,css,html}',
-          'assets/favicon*.png',
-          'assets/icon-*.png',
-          'assets/apple-touch-icon*.png',
-          'assets/maskable-icon.png',
+          'assets/**/favicon*.png',
+          'assets/**/icon-*.png',
+          'assets/**/apple-touch-icon*.png',
+          'assets/**/maskable-icon.png',
           'manifest.webmanifest',
         ],
         globIgnores: ['images/**/*', '**/*.map', 'index.html'],

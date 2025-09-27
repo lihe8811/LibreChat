@@ -598,6 +598,21 @@ export const turnstileSchema = z.object({
 
 export type TTurnstileConfig = z.infer<typeof turnstileSchema>;
 
+export const brandingConfigSchema = z.object({
+  logoVariant: z.string().trim().optional(),
+  helpAndFaqURL: z
+    .union([z.string().trim(), z.record(z.string(), z.string().trim())])
+    .optional(),
+  appTitle: z.union([z.string().trim(), z.record(z.string(), z.string().trim())]).optional(),
+});
+
+export type TBrandingConfig = z.infer<typeof brandingConfigSchema> & {
+  assetPrefix?: string;
+  appTitle?: string | Record<string, string>;
+};
+
+export const brandingSchema = brandingConfigSchema.optional();
+
 export type TStartupConfig = {
   appTitle: string;
   socialLogins?: string[];
@@ -646,6 +661,7 @@ export type TStartupConfig = {
   sharePointPickerSharePointScope?: string;
   openidReuseTokens?: boolean;
   minPasswordLength?: number;
+  branding?: TBrandingConfig;
   webSearch?: {
     searchProvider?: SearchProviders;
     scraperType?: ScraperTypes;
@@ -829,6 +845,7 @@ export const configSchema = z.object({
       allowedDomains: z.array(z.string()).optional(),
     })
     .default({ socialLogins: defaultSocialLogins }),
+  branding: brandingSchema,
   balance: balanceSchema.optional(),
   transactions: transactionsSchema.optional(),
   speech: z

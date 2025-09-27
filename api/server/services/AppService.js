@@ -80,6 +80,7 @@ const AppService = async () => {
     config,
     memory,
     speech,
+    branding: config.branding ?? configDefaults.branding,
     balance,
     transactions,
     mcpConfig,
