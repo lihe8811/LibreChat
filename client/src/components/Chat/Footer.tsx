@@ -34,13 +34,15 @@ export default function Footer({ className }: { className?: string }) {
     </a>
   );
 
+  // Get branding information
+  const branding = config?.branding;
+  const appTitle = config?.appTitle || 'LibreChat';
+  const helpAndFaqURL = branding?.helpAndFaqURL || 'https://librechat.ai';
+
   const mainContentParts = (
     typeof config?.customFooter === 'string'
       ? config.customFooter
-      : '[LibreChat ' +
-        Constants.VERSION +
-        '](https://librechat.ai) - ' +
-        localize('com_ui_latest_footer')
+      : `[${appTitle} ${Constants.VERSION}](${helpAndFaqURL}) - ${localize('com_ui_latest_footer')}`
   ).split('|');
 
   useEffect(() => {

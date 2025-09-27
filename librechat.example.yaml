@@ -99,6 +99,20 @@ interface:
   # Temporary chat retention period in hours (default: 720, min: 1, max: 8760)
   # temporaryChatRetention: 1
 
+# Branding options for client-facing assets
+branding:
+  # Set to the name of a subdirectory under client/public/assets to swap logo files.
+  # Example: 'qingfan' loads assets from client/public/assets/qingfan
+  logoVariant: 'default'
+  # Optionally override the application title per variant or with a single string value.
+  appTitle:
+    default: 'LibreChat'
+    qingfan: 'Qingfan AI'
+  # Optionally override the Help/FAQ link per variant or with a single string value.
+  helpAndFaqURL:
+    default: 'https://librechat.ai'
+    qingfan: 'https://qingfan.example/help'
+
 # Example Cloudflare turnstile (optional)
 #turnstile:
 #  siteKey: "your-site-key-here"

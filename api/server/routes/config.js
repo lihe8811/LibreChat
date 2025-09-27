@@ -66,8 +66,61 @@ router.get('/', async function (req, res) {
     const balanceConfig = getBalanceConfig(appConfig);
 
     /** @type {TStartupConfig} */
+    const configBranding = appConfig?.branding;
+    const configLogoVariant = configBranding?.logoVariant?.trim();
+    const logoVariant =
+      configLogoVariant && configLogoVariant.length > 0 ? configLogoVariant : 'default';
+    const assetPrefix = logoVariant === 'default' ? 'assets' : `assets/${logoVariant}`;
+
+    const brandingAppTitle = configBranding?.appTitle;
+    let appTitle = 'LibreChat';
+    if (brandingAppTitle) {
+      if (typeof brandingAppTitle === 'string') {
+        const trimmed = brandingAppTitle.trim();
+        if (trimmed) {
+          appTitle = trimmed;
+        }
+      } else if (typeof brandingAppTitle === 'object') {
+        const rawVariantTitle = brandingAppTitle[logoVariant];
+        const rawDefaultTitle = brandingAppTitle.default;
+        const variantTitle =
+          typeof rawVariantTitle === 'string' && rawVariantTitle.trim().length > 0
+            ? rawVariantTitle.trim()
+            : '';
+        const defaultTitle =
+          typeof rawDefaultTitle === 'string' && rawDefaultTitle.trim().length > 0
+            ? rawDefaultTitle.trim()
+            : '';
+        appTitle = variantTitle || defaultTitle || appTitle;
+      }
+    }
+
+    let helpAndFaqURL = 'https://librechat.ai';
+
+    const brandingHelp = configBranding?.helpAndFaqURL;
+    if (brandingHelp) {
+      if (typeof brandingHelp === 'string') {
+        const trimmed = brandingHelp.trim();
+        if (trimmed) {
+          helpAndFaqURL = trimmed;
+        }
+      } else if (typeof brandingHelp === 'object') {
+        const rawVariantHelp = brandingHelp[logoVariant];
+        const rawDefaultHelp = brandingHelp.default;
+        const variantHelp =
+          typeof rawVariantHelp === 'string' && rawVariantHelp.trim().length > 0
+            ? rawVariantHelp.trim()
+            : '';
+        const defaultHelp =
+          typeof rawDefaultHelp === 'string' && rawDefaultHelp.trim().length > 0
+            ? rawDefaultHelp.trim()
+            : '';
+        helpAndFaqURL = variantHelp || defaultHelp || helpAndFaqURL;
+      }
+    }
+
     const payload = {
-      appTitle: process.env.APP_TITLE || 'LibreChat',
+      appTitle,
       socialLogins: appConfig?.registration?.socialLogins ?? defaultSocialLogins,
       discordLoginEnabled: !!process.env.DISCORD_CLIENT_ID && !!process.env.DISCORD_CLIENT_SECRET,
       facebookLoginEnabled:
@@ -100,7 +153,7 @@ router.get('/', async function (req, res) {
         isBirthday() ||
         isEnabled(process.env.SHOW_BIRTHDAY_ICON) ||
         process.env.SHOW_BIRTHDAY_ICON === '',
-      helpAndFaqURL: process.env.HELP_AND_FAQ_URL || 'https://librechat.ai',
+      helpAndFaqURL,
       interface: appConfig?.interfaceConfig,
       turnstile: appConfig?.turnstileConfig,
       modelSpecs: appConfig?.modelSpecs,
@@ -119,6 +172,13 @@ router.get('/', async function (req, res) {
       conversationImportMaxFileSize: process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES
         ? parseInt(process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES, 10)
         : 0,
+      branding: removeNullishValues({
+        ...(configBranding ?? {}),
+        logoVariant,
+        assetPrefix,
+        appTitle,
+        helpAndFaqURL,
+      }),
     };
 
     const minPasswordLength = parseInt(process.env.MIN_PASSWORD_LENGTH, 10);
