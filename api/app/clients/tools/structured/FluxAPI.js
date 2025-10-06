@@ -1,7 +1,4 @@
 const { z } = require('zod');
-const fs = require('fs');
-const path = require('path');
-const { getFiles } = require('~/models/File');
 const axios = require('axios');
 const fetch = require('node-fetch');
 const { v4: uuidv4 } = require('uuid');
@@ -9,8 +6,7 @@ const { Tool } = require('@langchain/core/tools');
 const { logger } = require('@librechat/data-schemas');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { FileContext, ContentTypes } = require('librechat-data-provider');
-const { getStrategyFunctions } = require('~/server/services/Files/strategies');
-const { logger } = require('~/config');
+const { getFiles } = require('~/models/File');
 
 const displayMessage =
   "Flux displayed an image. All generated images are already plainly visible, so don't repeat the descriptions in detail. Do not list download links as they are available in the UI already. The user may download the images by clicking on them, but do not mention anything about downloading to the user.";
