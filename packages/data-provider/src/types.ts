@@ -381,7 +381,8 @@ export type TRegisterUser = {
 };
 
 export type TLoginUser = {
-  email: string;
+  email?: string;
+  username?: string;
   password: string;
   token?: string;
   backupCode?: string;

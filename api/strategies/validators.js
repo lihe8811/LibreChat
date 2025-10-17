@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { isEnabled } = require('@librechat/api');
 
 const MIN_PASSWORD_LENGTH = parseInt(process.env.MIN_PASSWORD_LENGTH, 10) || 8;
 
@@ -30,16 +31,26 @@ const usernameSchema = z
     message: 'Potential injection attack detected',
   });
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z
-    .string()
-    .min(MIN_PASSWORD_LENGTH)
-    .max(128)
-    .refine((value) => value.trim().length > 0, {
-      message: 'Password cannot be only spaces',
-    }),
-});
+const passwordSchema = z
+  .string()
+  .min(MIN_PASSWORD_LENGTH)
+  .max(128)
+  .refine((value) => value.trim().length > 0, {
+    message: 'Password cannot be only spaces',
+  });
+
+const emailLoginEnabled =
+  process.env.ALLOW_EMAIL_LOGIN === undefined || isEnabled(process.env.ALLOW_EMAIL_LOGIN);
+
+const loginSchema = emailLoginEnabled
+  ? z.object({
+      email: z.string().email(),
+      password: passwordSchema,
+    })
+  : z.object({
+      username: usernameSchema,
+      password: passwordSchema,
+    });
 
 const registerSchema = z
   .object({
@@ -50,20 +61,8 @@ const registerSchema = z
       .optional()
       .nullable(),
     email: z.string().email(),
-    password: z
-      .string()
-      .min(MIN_PASSWORD_LENGTH)
-      .max(128)
-      .refine((value) => value.trim().length > 0, {
-        message: 'Password cannot be only spaces',
-      }),
-    confirm_password: z
-      .string()
-      .min(MIN_PASSWORD_LENGTH)
-      .max(128)
-      .refine((value) => value.trim().length > 0, {
-        message: 'Password cannot be only spaces',
-      }),
+    password: passwordSchema,
+    confirm_password: passwordSchema,
   })
   .superRefine(({ confirm_password, password }, ctx) => {
     if (confirm_password !== password) {
