@@ -27,15 +27,28 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const { data: config } = useGetStartupConfig();
-  const useUsernameLogin = config?.ldap?.username;
+  const emailLoginEnabled = startupConfig.emailLoginEnabled !== false;
+  const ldapRequiresUsername = Boolean(config?.ldap?.username);
+  const useUsernameLogin = ldapRequiresUsername || !emailLoginEnabled;
+  const loginFieldName: 'email' | 'username' = useUsernameLogin ? 'username' : 'email';
+  const loginLabel = useUsernameLogin
+    ? localize('com_auth_username').replace(/ \(.*$/, '')
+    : localize('com_auth_email_address');
   const validTheme = isDark(theme) ? 'dark' : 'light';
   const requireCaptcha = Boolean(startupConfig.turnstile?.siteKey);
 
   useEffect(() => {
+    if (!emailLoginEnabled) {
+      if (showResendLink) {
+        setShowResendLink(false);
+      }
+      return;
+    }
+
     if (error && error.includes('422') && !showResendLink) {
       setShowResendLink(true);
     }
-  }, [error, showResendLink]);
+  }, [error, showResendLink, emailLoginEnabled]);
 
   const resendLinkMutation = useResendVerificationEmail({
     onMutate: () => {
@@ -48,7 +61,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
     return null;
   }
 
-  const renderError = (fieldName: string) => {
+  const renderError = (fieldName: keyof TLoginUser) => {
     const errorMessage = errors[fieldName]?.message;
     return errorMessage ? (
       <span role="alert" className="mt-1 text-sm text-red-500 dark:text-red-900">
@@ -58,6 +71,10 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
   };
 
   const handleResendEmail = () => {
+    if (!emailLoginEnabled) {
+      return setShowResendLink(false);
+    }
+
     const email = getValues('email');
     if (!email) {
       return setShowResendLink(false);
@@ -67,7 +84,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
 
   return (
     <>
-      {showResendLink && (
+      {emailLoginEnabled && showResendLink && (
         <div className="mt-2 rounded-md border border-green-500 bg-green-500/10 px-3 py-2 text-sm text-gray-600 dark:text-gray-200">
           {localize('com_auth_email_verification_resend_prompt')}
           <button
@@ -84,37 +101,79 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
         className="mt-6"
         aria-label="Login form"
         method="POST"
-        onSubmit={handleSubmit((data) => onSubmit(data))}
+        onSubmit={handleSubmit((data) => {
+          const payload: TLoginUser = {
+            password: data.password,
+          };
+
+          if (data.token) {
+            payload.token = data.token;
+          }
+
+          if (data.backupCode) {
+            payload.backupCode = data.backupCode;
+          }
+
+          if (useUsernameLogin) {
+            const normalizedUsername = data.username?.trim().toLowerCase();
+            if (normalizedUsername) {
+              payload.username = normalizedUsername;
+            }
+          } else {
+            const normalizedEmail = data.email?.trim().toLowerCase();
+            if (normalizedEmail) {
+              payload.email = normalizedEmail;
+            }
+          }
+
+          onSubmit(payload);
+        })}
       >
         <div className="mb-4">
           <div className="relative">
             <input
               type="text"
-              id="email"
+              id={loginFieldName}
               autoComplete={useUsernameLogin ? 'username' : 'email'}
-              aria-label={localize('com_auth_email')}
-              {...register('email', {
-                required: localize('com_auth_email_required'),
-                maxLength: { value: 120, message: localize('com_auth_email_max_length') },
-                pattern: {
-                  value: useUsernameLogin ? /\S+/ : /\S+@\S+\.\S+/,
-                  message: localize('com_auth_email_pattern'),
-                },
+              aria-label={loginLabel}
+              {...register(loginFieldName, {
+                required: useUsernameLogin
+                  ? localize('com_auth_username_min_length')
+                  : localize('com_auth_email_required'),
+                minLength: useUsernameLogin
+                  ? {
+                      value: 2,
+                      message: localize('com_auth_username_min_length'),
+                    }
+                  : undefined,
+                maxLength: useUsernameLogin
+                  ? {
+                      value: 80,
+                      message: localize('com_auth_username_max_length'),
+                    }
+                  : {
+                      value: 120,
+                      message: localize('com_auth_email_max_length'),
+                    },
+                pattern: useUsernameLogin
+                  ? undefined
+                  : {
+                      value: /\S+@\S+\.\S+/,
+                      message: localize('com_auth_email_pattern'),
+                    },
               })}
-              aria-invalid={!!errors.email}
+              aria-invalid={!!errors[loginFieldName]}
               className="webkit-dark-styles transition-color peer w-full rounded-2xl border border-border-light bg-surface-primary px-3.5 pb-2.5 pt-3 text-text-primary duration-200 focus:border-green-500 focus:outline-none"
               placeholder=" "
             />
             <label
-              htmlFor="email"
+              htmlFor={loginFieldName}
               className="absolute start-3 top-1.5 z-10 origin-[0] -translate-y-4 scale-75 transform bg-surface-primary px-2 text-sm text-text-secondary-alt duration-200 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:scale-100 peer-focus:top-1.5 peer-focus:-translate-y-4 peer-focus:scale-75 peer-focus:px-2 peer-focus:text-green-600 dark:peer-focus:text-green-500 rtl:peer-focus:left-auto rtl:peer-focus:translate-x-1/4"
             >
-              {useUsernameLogin
-                ? localize('com_auth_username').replace(/ \(.*$/, '')
-                : localize('com_auth_email_address')}
+              {loginLabel}
             </label>
           </div>
-          {renderError('email')}
+          {renderError(loginFieldName)}
         </div>
         <div className="mb-2">
           <div className="relative">

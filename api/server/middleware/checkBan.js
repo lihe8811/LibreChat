@@ -10,6 +10,8 @@ const { findUser } = require('~/models');
 
 const banCache = new Keyv({ store: keyvMongo, namespace: ViolationTypes.BAN, ttl: 0 });
 const message = 'Your account has been temporarily banned due to violations of our service.';
+const emailLoginEnabled =
+  process.env.ALLOW_EMAIL_LOGIN === undefined || isEnabled(process.env.ALLOW_EMAIL_LOGIN);
 
 /**
  * Respond to the request if the user is banned.
@@ -55,8 +57,17 @@ const checkBan = async (req, res, next = () => {}) => {
     req.ip = removePorts(req);
     let userId = req.user?.id ?? req.user?._id ?? null;
 
-    if (!userId && req?.body?.email) {
-      const user = await findUser({ email: req.body.email }, '_id');
+    if (!userId && emailLoginEnabled && req?.body?.email) {
+      const normalizedEmail =
+        typeof req.body.email === 'string' ? req.body.email.toLowerCase().trim() : '';
+      const user = await findUser({ email: normalizedEmail }, '_id');
+      userId = user?._id ? user._id.toString() : userId;
+    }
+
+    if (!userId && !emailLoginEnabled && req?.body?.username) {
+      const normalizedUsername =
+        typeof req.body.username === 'string' ? req.body.username.toLowerCase().trim() : '';
+      const user = await findUser({ username: normalizedUsername }, '_id');
       userId = user?._id ? user._id.toString() : userId;
     }
 
