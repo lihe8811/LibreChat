@@ -900,6 +900,7 @@ class AgentClient extends BaseClient {
             part.type === ContentTypes.TOOL_CALL ||
             part.tool_call_ids
           );
+
         });
       }
     } catch (err) {
