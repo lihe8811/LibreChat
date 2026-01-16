@@ -31,20 +31,6 @@
     ]
   },
   {
-    "name": "YouTube",
-    "pluginKey": "youtube",
-    "toolkit": true,
-    "description": "Get YouTube video information, retrieve comments, analyze transcripts and search for videos.",
-    "icon": "https://www.youtube.com/s/desktop/7449ebf7/img/favicon_144x144.png",
-    "authConfig": [
-      {
-        "authField": "YOUTUBE_API_KEY",
-        "label": "YouTube API Key",
-        "description": "Your YouTube Data API v3 key."
-      }
-    ]
-  },
-  {
     "name": "OpenAI Image Tools",
     "pluginKey": "image_gen_oai",
     "toolkit": true,
@@ -169,8 +155,8 @@
   {
     "name": "Flux",
     "pluginKey": "flux",
-    "description": "Image Generation and Editing using Flux's latest state-of-the-art models",
-    "icon": "https://mintlify.s3.us-west-1.amazonaws.com/bfl/logo/logo_light.png",
+    "description": "Generate images using text with the Flux API.",
+    "icon": "https://blackforestlabs.ai/wp-content/uploads/2024/07/bfl_logo_retraced_blk.png",
     "isAuthRequired": "true",
     "authConfig": [
       {
@@ -183,8 +169,15 @@
   {
     "name": "Gemini Image Tools",
     "pluginKey": "gemini_image_gen",
-    "description": "Generate high-quality images using Google's Gemini 2.5 Flash Image Model",
-    "icon": "/assets/gemini_image_gen.png",
-    "authConfig": []
+    "toolkit": true,
+    "description": "Generate high-quality images using Google's Gemini Image Models. Supports Gemini API or Vertex AI.",
+    "icon": "assets/gemini_image_gen.svg",
+    "authConfig": [
+      {
+        "authField": "GEMINI_API_KEY||GOOGLE_KEY||GEMINI_VERTEX_ENABLED",
+        "label": "Gemini API Key (Optional if Vertex AI is configured)",
+        "description": "Your Google Gemini API Key from <a href='https://aistudio.google.com/app/apikey' target='_blank'>Google AI Studio</a>. Leave blank if using Vertex AI with service account."
+      }
+    ]
   }
 ]

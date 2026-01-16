@@ -1,53 +1,193 @@
-const { z } = require('zod');
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 const { v4 } = require('uuid');
-const { Tool } = require('@langchain/core/tools');
-const { FileContext, ContentTypes, FileSources } = require('librechat-data-provider');
-const { logger } = require('@librechat/data-schemas');
-const { getStrategyFunctions } = require('~/server/services/Files/strategies');
-const { getFiles } = require('~/models/File');
+const { ProxyAgent } = require('undici');
 const { GoogleGenAI } = require('@google/genai');
+const { tool } = require('@langchain/core/tools');
+const { logger } = require('@librechat/data-schemas');
+const {
+  FileContext,
+  ContentTypes,
+  FileSources,
+  EImageOutputType,
+} = require('librechat-data-provider');
+const {
+  geminiToolkit,
+  loadServiceKey,
+  getBalanceConfig,
+  getTransactionsConfig,
+} = require('@librechat/api');
+const { getStrategyFunctions } = require('~/server/services/Files/strategies');
+const { spendTokens } = require('~/models/spendTokens');
+const { getFiles } = require('~/models/File');
+
+/**
+ * Configure proxy support for Google APIs
+ * This wraps globalThis.fetch to add a proxy dispatcher only for googleapis.com URLs
+ * This is necessary because @google/genai SDK doesn't support custom fetch or httpOptions.dispatcher
+ */
+if (process.env.PROXY) {
+  const originalFetch = globalThis.fetch;
+  const proxyAgent = new ProxyAgent(process.env.PROXY);
+
+  globalThis.fetch = function (url, options = {}) {
+    const urlString = url.toString();
+    if (urlString.includes('googleapis.com')) {
+      options = { ...options, dispatcher: proxyAgent };
+    }
+    return originalFetch.call(this, url, options);
+  };
+}
+
+/**
+ * Get the default service key file path (consistent with main Google endpoint)
+ * @returns {string} - The default path to the service key file
+ */
+function getDefaultServiceKeyPath() {
+  return (
+    process.env.GOOGLE_SERVICE_KEY_FILE || path.join(process.cwd(), 'api', 'data', 'auth.json')
+  );
+}
 
 const displayMessage =
   "Gemini displayed an image. All generated images are already plainly visible, so don't repeat the descriptions in detail. Do not list download links as they are available in the UI already. The user may download the images by clicking on them, but do not mention anything about downloading to the user.";
 
 /**
- * Save base64 image data to storage using processFileURL (GENERIC - works for any image generation tool)
- * @param {Object} params - The parameters object
- * @param {string} params.base64Data - Base64 encoded image data
- * @param {string} params.outputFormat - Image format (png, webp, etc.)
- * @param {Function} params.processFileURL - Function to process file URLs
- * @param {string} params.fileStrategy - File storage strategy (local, s3, azure, firebase)
- * @param {string} params.userId - User ID
- * @returns {Promise<string>} - The file URL in storage
+ * Replaces unwanted characters from the input string
+ * @param {string} inputString - The input string to process
+ * @returns {string} - The processed string
  */
-async function saveBase64ImageToStorage({
-  base64Data,
-  outputFormat,
-  processFileURL,
-  fileStrategy,
-  userId,
-}) {
-  if (!processFileURL || !fileStrategy || !userId) {
-    logger.warn(
-      '[GeminiImageGen] Missing required parameters for storage, falling back to data URL',
+function replaceUnwantedChars(inputString) {
+  return inputString?.replace(/[^\w\s\-_.,!?()]/g, '') || '';
+}
+
+/**
+ * Validate and sanitize image format
+ * @param {string} format - The format to validate
+ * @returns {string} - Safe format
+ */
+function getSafeFormat(format) {
+  const allowedFormats = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+  return allowedFormats.includes(format?.toLowerCase()) ? format.toLowerCase() : 'png';
+}
+
+/**
+ * Convert image buffer to target format if needed
+ * @param {Buffer} inputBuffer - The input image buffer
+ * @param {string} targetFormat - The target format (png, jpeg, webp)
+ * @returns {Promise<{buffer: Buffer, format: string}>} - Converted buffer and format
+ */
+async function convertImageFormat(inputBuffer, targetFormat) {
+  const metadata = await sharp(inputBuffer).metadata();
+  const currentFormat = metadata.format;
+
+  // Normalize format names (jpg -> jpeg)
+  const normalizedTarget = targetFormat === 'jpg' ? 'jpeg' : targetFormat.toLowerCase();
+  const normalizedCurrent = currentFormat === 'jpg' ? 'jpeg' : currentFormat;
+
+  // If already in target format, return as-is
+  if (normalizedCurrent === normalizedTarget) {
+    return { buffer: inputBuffer, format: normalizedTarget };
+  }
+
+  // Convert to target format
+  const convertedBuffer = await sharp(inputBuffer).toFormat(normalizedTarget).toBuffer();
+  return { buffer: convertedBuffer, format: normalizedTarget };
+}
+
+/**
+ * Initialize Gemini client (supports both Gemini API and Vertex AI)
+ * Priority: API key (from options, resolved by loadAuthValues) > Vertex AI service account
+ * @param {Object} options - Initialization options
+ * @param {string} [options.GEMINI_API_KEY] - Gemini API key (resolved by loadAuthValues)
+ * @param {string} [options.GOOGLE_KEY] - Google API key (resolved by loadAuthValues)
+ * @returns {Promise<GoogleGenAI>} - The initialized client
+ */
+async function initializeGeminiClient(options = {}) {
+  const geminiKey = options.GEMINI_API_KEY;
+  if (geminiKey) {
+    logger.debug('[GeminiImageGen] Using Gemini API with GEMINI_API_KEY');
+    return new GoogleGenAI({ apiKey: geminiKey });
+  }
+
+  const googleKey = options.GOOGLE_KEY;
+  if (googleKey) {
+    logger.debug('[GeminiImageGen] Using Gemini API with GOOGLE_KEY');
+    return new GoogleGenAI({ apiKey: googleKey });
+  }
+
+  // Fall back to Vertex AI with service account
+  logger.debug('[GeminiImageGen] Using Vertex AI with service account');
+  const credentialsPath = getDefaultServiceKeyPath();
+
+  // Use loadServiceKey for consistent loading (supports file paths, JSON strings, base64)
+  const serviceKey = await loadServiceKey(credentialsPath);
+
+  if (!serviceKey || !serviceKey.project_id) {
+    throw new Error(
+      'Gemini Image Generation requires one of: user-provided API key, GEMINI_API_KEY or GOOGLE_KEY env var, or a valid Google service account. ' +
+        `Service account file not found or invalid at: ${credentialsPath}`,
     );
+  }
+
+  // Set GOOGLE_APPLICATION_CREDENTIALS for any Google Cloud SDK dependencies
+  try {
+    await fs.promises.access(credentialsPath);
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
+  } catch {
+    // File doesn't exist, skip setting env var
+  }
+
+  return new GoogleGenAI({
+    vertexai: true,
+    project: serviceKey.project_id,
+    location: process.env.GOOGLE_LOC || process.env.GOOGLE_CLOUD_LOCATION || 'global',
+  });
+}
+
+/**
+ * Save image to local filesystem
+ * @param {string} base64Data - Base64 encoded image data
+ * @param {string} format - Image format
+ * @param {string} userId - User ID
+ * @returns {Promise<string>} - The relative URL
+ */
+async function saveImageLocally(base64Data, format, userId) {
+  const safeFormat = getSafeFormat(format);
+  const safeUserId = userId ? path.basename(userId) : 'default';
+  const imageName = `gemini-img-${v4()}.${safeFormat}`;
+  const userDir = path.join(process.cwd(), 'client/public/images', safeUserId);
+
+  await fs.promises.mkdir(userDir, { recursive: true });
+
+  const filePath = path.join(userDir, imageName);
+  await fs.promises.writeFile(filePath, Buffer.from(base64Data, 'base64'));
+
+  logger.debug('[GeminiImageGen] Image saved locally to:', filePath);
+  return `/images/${safeUserId}/${imageName}`;
+}
+
+/**
+ * Save image to cloud storage
+ * @param {Object} params - Parameters
+ * @returns {Promise<string|null>} - The storage URL or null
+ */
+async function saveToCloudStorage({ base64Data, format, processFileURL, fileStrategy, userId }) {
+  if (!processFileURL || !fileStrategy || !userId) {
     return null;
   }
 
   try {
-    // Create a data URL from the base64 data
-    const dataURL = `data:image/${outputFormat};base64,${base64Data}`;
+    const safeFormat = getSafeFormat(format);
+    const safeUserId = path.basename(userId);
+    const dataURL = `data:image/${safeFormat};base64,${base64Data}`;
+    const imageName = `gemini-img-${v4()}.${safeFormat}`;
 
-    // Generate a unique filename
-    const imageName = `gemini-img-${v4()}.${outputFormat}`;
-
-    // Save to storage using processFileURL (works with any file strategy)
     const result = await processFileURL({
       URL: dataURL,
       basePath: 'images',
-      userId,
+      userId: safeUserId,
       fileName: imageName,
       fileStrategy,
       context: FileContext.image_generation,
@@ -55,591 +195,401 @@ async function saveBase64ImageToStorage({
 
     return result.filepath;
   } catch (error) {
-    logger.error('[GeminiImageGen] Error saving image to storage:', error);
+    logger.error('[GeminiImageGen] Error saving to cloud storage:', error);
     return null;
   }
 }
 
-class GeminiImageGen extends Tool {
-  constructor(fields = {}) {
-    super();
-    /** @type {boolean} Used to initialize the Tool without necessary variables. */
-    this.override = fields.override ?? false;
-    /** @type {boolean} Necessary for output to contain all image metadata. */
-    this.returnMetadata = fields.returnMetadata ?? false;
-
-    this.userId = fields.userId;
-    this.fileStrategy = fields.fileStrategy;
-    /** @type {boolean} */
-    this.isAgent = fields.isAgent;
-    /** @type {ServerRequest} */
-    this.req = fields.req;
-
-    // Extract processFileURL if available
-    if (fields.processFileURL) {
-      this.processFileURL = fields.processFileURL.bind(this);
-    }
-
-    // Store imageFiles for context (copied from OpenAI pattern)
-    /** @type {MongoFile[]} */
-    this.imageFiles = fields.imageFiles || [];
-    // Validate config only if not in override mode
-    this.validateConfig();
-
-    this.name = 'gemini_image_gen';
-
-    this.description = `Generates high-quality, original images based on text prompts, with optional image context.
-
-When to use \`gemini_image_gen\`:
-- To create entirely new images from detailed text descriptions
-- To generate images using existing images as context or inspiration
-- When the user requests image generation, creation, or asks to "generate an image"
-- When the user asks to "edit", "modify", "change", or "swap" elements in an image (generates new image with changes)
-
-When NOT to use \`gemini_image_gen\`:
-- For uploading or saving existing images without modification
-
-Generated image IDs will be returned in the response, so you can refer to them in future requests.`;
-
-    this.description_for_model = `Use this tool to generate images from text descriptions using Google Gemini.
-1. Prompts should be detailed and specific for best results.
-2. One image per function call. Create only 1 image per request.
-3. IMPORTANT: When user asks to "edit", "modify", "change", or "swap" elements in an existing image:
-   - ALWAYS include the original image ID in the image_ids array
-   - Describe the desired changes clearly in the prompt
-   - The tool will generate a new image based on the original image context + your prompt
-4. IMPORTANT: For editing requests, use DIRECT editing instructions:
-   - User says "remove the gun" → prompt should be "remove the gun from this image"
-   - User says "make it blue" → prompt should be "make this image blue"  
-   - User says "add sunglasses" → prompt should be "add sunglasses to this image"
-   - DO NOT reconstruct or modify the original prompt - use the user's editing instruction directly
-   - ALWAYS include the image being edited in image_ids array
-5. OPTIONAL: Use image_ids to provide context images that will influence the generation:
-   - Include any relevant image IDs from the conversation in the image_ids array
-   - These images will be used as visual context/inspiration for the new generation
-   - For "editing" requests, always include the image being "edited"
-6. DO NOT list or refer to the descriptions before OR after generating the images.
-7. Always mention the image type (photo, oil painting, watercolor painting, illustration, cartoon, drawing, vector, render, etc.) at the beginning of the prompt.
-
-The prompt should be a detailed paragraph describing every part of the image in concrete, objective detail.`;
-
-    this.schema = z.object({
-      prompt: z
-        .string()
-        .max(32000)
-        .describe(
-          'A detailed text description of the desired image, up to 32000 characters. For "editing" requests, describe the changes you want to make to the referenced image. Be specific about composition, style, lighting, and subject matter.',
-        ),
-      image_ids: z
-        .array(z.string())
-        .optional()
-        .describe(
-          `
-Optional array of image IDs to use as visual context for generation.
-
-Guidelines:
-- For "editing" requests: ALWAYS include the image ID being "edited"
-- For new generation with context: Include any relevant reference image IDs
-- If the user's request references any prior images, include their image IDs in this array
-- These images will be used as visual context/inspiration for the new generation
-- Never invent or hallucinate IDs; only use IDs that are visible in the conversation
-- If no images are relevant, omit this field entirely
-`.trim(),
-        ),
-    });
+/**
+ * Convert image files to Gemini inline data format
+ * @param {Object} params - Parameters
+ * @returns {Promise<Array>} - Array of inline data objects
+ */
+async function convertImagesToInlineData({ imageFiles, image_ids, req, fileStrategy }) {
+  if (!image_ids || image_ids.length === 0) {
+    return [];
   }
 
-  validateConfig() {
-    if (this.override) {
-      return;
-    }
-
-    // Use same pattern as other Google service integrations
-    const googleKey = process.env.GOOGLE_KEY;
-    if (!googleKey) {
-      throw new Error('Google API key not found');
-    }
-  }
-
-  wrapInMarkdown(imageUrl) {
-    return `![Generated Image](${imageUrl})`;
-  }
-
-  replaceUnwantedChars(inputString) {
-    return inputString?.replace(/[^\w\s\-_.,!?()]/g, '') || '';
-  }
-
-  returnValue(value) {
-    if (this.returnMetadata && typeof value === 'object') {
-      return value;
-    }
-
-    if (this.isAgent) {
-      return [displayMessage, value];
-    }
-
-    return value;
-  }
-
-  /**
-   * Check if the API response indicates content was blocked by safety filters
-   * @param {Object} response - The Gemini API response
-   * @returns {Object|null} - Safety block information or null if not blocked
-   */
-  checkForSafetyBlock(response) {
-    try {
-      // Check if response has candidates
-      if (!response.candidates || response.candidates.length === 0) {
-        return { reason: 'NO_CANDIDATES', message: 'No candidates returned by Gemini' };
-      }
-
-      const candidate = response.candidates[0];
-
-      // Check finishReason for safety blocks
-      if (candidate.finishReason) {
-        const finishReason = candidate.finishReason;
-
-        if (finishReason === 'SAFETY' || finishReason === 'PROHIBITED_CONTENT') {
-          return {
-            reason: finishReason,
-            message: 'Content was blocked by Gemini safety filters',
-            safetyRatings: candidate.safetyRatings || [],
-          };
-        }
-
-        if (finishReason === 'RECITATION') {
-          return {
-            reason: finishReason,
-            message: 'Content was blocked due to recitation concerns',
-          };
-        }
-      }
-
-      // Check safety ratings for blocks
-      if (candidate.safetyRatings) {
-        for (const rating of candidate.safetyRatings) {
-          if (rating.probability === 'HIGH' || rating.blocked === true) {
-            return {
-              reason: 'SAFETY_RATING',
-              message: `Content blocked due to ${rating.category} safety concerns`,
-              category: rating.category,
-              probability: rating.probability,
-            };
-          }
-        }
-      }
-
-      return null; // No safety block detected
-    } catch (error) {
-      logger.error('[GeminiImageGen] Error checking safety block:', error);
-      return null;
-    }
-  }
-
-  async initializeGeminiAI() {
-    try {
-      // Use new Google GenAI SDK
-      const googleKey = process.env.GOOGLE_KEY;
-
-      // Initialize client
-      const ai = new GoogleGenAI({
-        apiKey: googleKey,
-      });
-
-      return ai;
-    } catch (error) {
-      logger.error('[GeminiImageGen] Error initializing Google GenAI client:', error);
-      throw new Error(`Failed to initialize Google GenAI client: ${error.message}`);
-    }
-  }
-
-  async saveImageLocally(base64Data, outputFormat = 'png', userId) {
-    try {
-      // Create unique filename
-      const imageName = `gemini-img-${v4()}.${outputFormat}`;
-
-      // Create user-specific directory path for local storage
-      const userDir = path.join(process.cwd(), 'client/public/images', userId || 'default');
-
-      // Ensure directory exists
-      if (!fs.existsSync(userDir)) {
-        fs.mkdirSync(userDir, { recursive: true });
-      }
-
-      // Full file path
-      const filePath = path.join(userDir, imageName);
-
-      // Save image file directly
-      fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
-
-      // Return relative URL for the frontend
-      const relativeUrl = `/images/${userId || 'default'}/${imageName}`;
-
-      logger.debug('[GeminiImageGen] Image saved locally to:', filePath);
-
-      return relativeUrl;
-    } catch (error) {
-      logger.error('[GeminiImageGen] Error saving image locally:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Convert image file to base64 inlineData format for Gemini (copied and adapted from OpenAI pattern)
-   * @param {MongoFile[]} imageFiles - Array of image file objects
-   * @param {string[]} image_ids - Array of image IDs to process
-   * @returns {Promise<Array>} - Array of inlineData objects for Gemini
-   */
-  async convertImagesToInlineData(imageFiles, image_ids) {
-    if (!image_ids || image_ids.length === 0) {
-      return [];
-    }
-
-    logger.debug('[GeminiImageGen] Converting images to inlineData format for IDs:', image_ids);
-
-    /** @type {Record<string, any>} */
-    const streamMethods = {};
-    const requestFilesMap = Object.fromEntries(imageFiles.map((f) => [f.file_id, { ...f }]));
-    const orderedFiles = new Array(image_ids.length);
-    const idsToFetch = [];
-    const indexOfMissing = Object.create(null);
-
-    // Map existing files and identify missing ones (copied from OpenAI)
-    for (let i = 0; i < image_ids.length; i++) {
-      const id = image_ids[i];
-      const file = requestFilesMap[id];
-
-      if (file) {
-        orderedFiles[i] = file;
-        logger.debug('[GeminiImageGen] Found file in request files:', id);
-      } else {
-        idsToFetch.push(id);
-        indexOfMissing[id] = i;
-        logger.debug('[GeminiImageGen] Need to fetch file from database:', id);
-      }
-    }
-
-    // Fetch missing files from database (copied from OpenAI)
-    if (idsToFetch.length) {
-      logger.debug('[GeminiImageGen] Fetching', idsToFetch.length, 'files from database');
-      const fetchedFiles = await getFiles(
-        {
-          user: this.req.user.id,
-          file_id: { $in: idsToFetch },
-          height: { $exists: true },
-          width: { $exists: true },
-        },
-        {},
-        {},
-      );
-
-      logger.debug('[GeminiImageGen] Fetched', fetchedFiles.length, 'files from database');
-      for (const file of fetchedFiles) {
-        requestFilesMap[file.file_id] = file;
-        orderedFiles[indexOfMissing[file.file_id]] = file;
-      }
-    }
-
-    // Convert files to Gemini inlineData format
-    const inlineDataArray = [];
-    for (const imageFile of orderedFiles) {
-      if (!imageFile) {
-        logger.warn('[GeminiImageGen] Skipping missing image file');
-        continue;
-      }
-
-      try {
-        // Get download stream (copied from OpenAI pattern)
-        const source = imageFile.source || this.fileStrategy;
-        if (!source) {
-          logger.error('[GeminiImageGen] No source found for image file:', imageFile.file_id);
-          continue;
-        }
-
-        let getDownloadStream;
-        if (streamMethods[source]) {
-          getDownloadStream = streamMethods[source];
-        } else {
-          ({ getDownloadStream } = getStrategyFunctions(source));
-          streamMethods[source] = getDownloadStream;
-        }
-
-        if (!getDownloadStream) {
-          logger.error('[GeminiImageGen] No download stream method found for source:', source);
-          continue;
-        }
-
-        const stream = await getDownloadStream(this.req, imageFile.filepath);
-        if (!stream) {
-          logger.error(
-            '[GeminiImageGen] Failed to get download stream for image:',
-            imageFile.file_id,
-          );
-          continue;
-        }
-
-        // Convert stream to buffer then to base64
-        const chunks = [];
-        for await (const chunk of stream) {
-          chunks.push(chunk);
-        }
-        const buffer = Buffer.concat(chunks);
-        const base64Data = buffer.toString('base64');
-
-        // Determine MIME type
-        const mimeType = imageFile.type || 'image/png';
-
-        // Add to inlineData array in Gemini format
-        inlineDataArray.push({
-          inlineData: {
-            mimeType,
-            data: base64Data,
-          },
-        });
-
-        logger.debug('[GeminiImageGen] Converted image to inlineData:', {
-          file_id: imageFile.file_id,
-          mimeType,
-          dataLength: base64Data.length,
-        });
-      } catch (error) {
-        logger.error('[GeminiImageGen] Error processing image file:', imageFile.file_id, error);
-        // Continue with other images
-      }
-    }
-
-    logger.debug(
-      '[GeminiImageGen] Successfully converted',
-      inlineDataArray.length,
-      'images to inlineData',
-    );
-    return inlineDataArray;
-  }
-
-  async _call(data) {
-    // Ensure consistent parameter extraction regardless of order
-    const prompt = data.prompt;
-    const image_ids = data.image_ids;
-
-    if (!prompt) {
-      throw new Error('Missing required field: prompt');
-    }
-
-    logger.debug('[GeminiImageGen] Generating image with prompt:', prompt);
-    logger.debug('[GeminiImageGen] Image IDs provided:', image_ids);
-    logger.debug('[GeminiImageGen] Available imageFiles:', this.imageFiles.length);
-
-    let ai;
-    try {
-      ai = await this.initializeGeminiAI();
-    } catch (error) {
-      logger.error('[GeminiImageGen] Failed to initialize Google GenAI:', error);
-      return this.returnValue(`Failed to initialize Google GenAI: ${error.message}`);
-    }
-
-    let apiResponse;
-    try {
-      // Build contents array for the request
-      const contents = [{ text: this.replaceUnwantedChars(prompt) }];
-
-      // Add context images if provided (NEW FUNCTIONALITY)
-      if (image_ids && image_ids.length > 0) {
-        logger.debug('[GeminiImageGen] Processing context images...');
-        const contextImages = await this.convertImagesToInlineData(this.imageFiles, image_ids);
-
-        // Add each context image to contents array
-        for (const imageData of contextImages) {
-          contents.push(imageData);
-        }
-
-        logger.debug('[GeminiImageGen] Added', contextImages.length, 'context images to request');
-      } else {
-        logger.debug('[GeminiImageGen] No image context provided - text-only generation');
-      }
-
-      logger.debug('[GeminiImageGen] Final contents array length:', contents.length);
-
-      // Generate image using Google GenAI with optional image context
-      apiResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image-preview',
-        contents: contents,
-        config: {
-          responseModalities: ['TEXT', 'IMAGE'],
-        },
-      });
-
-      logger.debug('[GeminiImageGen] Received response from Google GenAI');
-    } catch (error) {
-      logger.error('[GeminiImageGen] Problem generating the image:', error);
-      return this
-        .returnValue(`Something went wrong when trying to generate the image. The Google GenAI API may be unavailable:
-Error Message: ${error.message}`);
-    }
-
-    // Enhanced safety and response checking
-    if (!apiResponse || !apiResponse.candidates || !apiResponse.candidates[0]) {
-      return this.returnValue(
-        'Something went wrong when trying to generate the image. The Google GenAI API may be unavailable',
-      );
-    }
-
-    console.log('apiResponse', apiResponse);
-
-    // Check for content safety blocks BEFORE trying to extract image data
-    const safetyBlock = this.checkForSafetyBlock(apiResponse);
-    if (safetyBlock) {
-      logger.warn('[GeminiImageGen] Content blocked by safety filters:', safetyBlock);
-
-      // Provide user-friendly error message based on block reason
-      let errorMessage =
-        'I cannot generate this image because it was blocked by content safety filters. ';
-
-      if (safetyBlock.reason === 'SAFETY' || safetyBlock.reason === 'PROHIBITED_CONTENT') {
-        errorMessage +=
-          'The prompt may contain content that violates content policies (such as violence, weapons, or inappropriate content). ';
-      } else if (safetyBlock.reason === 'RECITATION') {
-        errorMessage += 'The content may be too similar to copyrighted material. ';
-      }
-
-      errorMessage += 'Please try rephrasing your request with different, safer content.';
-
-      if (safetyBlock.category) {
-        errorMessage += ` (Blocked category: ${safetyBlock.category})`;
-      }
-
-      return this.returnValue(errorMessage);
-    }
-
-    // Extract image data from response
-    const imageData = apiResponse.candidates[0].content.parts.find((part) => part.inlineData)
-      ?.inlineData?.data;
-
-    if (!imageData) {
-      // Enhanced safety detection and logging
-      const candidate = apiResponse.candidates[0];
-
-      // Log detailed response info for debugging
-      logger.warn('[GeminiImageGen] No image data in response. Candidate details:', {
-        finishReason: candidate.finishReason,
-        hasContent: !!candidate.content,
-        contentParts: candidate.content?.parts?.length || 0,
-        safetyRatings: candidate.safetyRatings?.length || 0,
-        contentPartsTypes: candidate.content?.parts?.map((p) => Object.keys(p)) || [],
-      });
-
-      // Check for safety ratings to provide specific feedback
-      let safetyIssue = null;
-      if (candidate.safetyRatings && candidate.safetyRatings.length > 0) {
-        for (const rating of candidate.safetyRatings) {
-          if (
-            rating.probability === 'HIGH' ||
-            rating.probability === 'MEDIUM' ||
-            rating.blocked === true
-          ) {
-            safetyIssue = rating;
-            break;
-          }
-        }
-      }
-
-      // Create appropriate error message
-      let errorMessage;
-      if (safetyIssue) {
-        errorMessage = `I cannot generate this image because it was blocked by content safety filters. The content was flagged for ${safetyIssue.category} (probability: ${safetyIssue.probability}). Please try rephrasing your request with different, safer content.`;
-        logger.warn('[GeminiImageGen] Content blocked by safety filter:', safetyIssue);
-      } else if (
-        candidate.finishReason === 'SAFETY' ||
-        candidate.finishReason === 'PROHIBITED_CONTENT'
-      ) {
-        errorMessage =
-          'I cannot generate this image because it was blocked by content safety filters. Please try rephrasing your request with different, safer content.';
-        logger.warn('[GeminiImageGen] Content blocked by finishReason:', candidate.finishReason);
-      } else {
-        errorMessage =
-          'No image was generated. This might be due to content safety filters blocking the request, or the model being unable to create the requested image. Please try rephrasing your prompt with different content.';
-        logger.warn('[GeminiImageGen] Unknown reason for missing image data');
-      }
-
-      // Return error message in proper agent format
-      if (this.isAgent) {
-        const errorResponse = [
-          {
-            type: ContentTypes.TEXT,
-            text: errorMessage,
-          },
-        ];
-        return [errorResponse, { content: [], file_ids: [] }];
-      } else {
-        return this.returnValue(errorMessage);
-      }
-    }
-
-    logger.debug('[GeminiImageGen] Successfully extracted image data');
-
-    // HYBRID APPROACH: Local strategy uses direct saving, others use OpenAI pattern
-    let imageUrl = `data:image/png;base64,${imageData}`;
-
-    if (this.fileStrategy === FileSources.local || this.fileStrategy === 'local') {
-      // For local strategy, save directly and use data URL to avoid artifact processing issues
-      logger.debug('[GeminiImageGen] Local strategy detected - using direct save + data URL');
-      try {
-        await this.saveImageLocally(imageData, 'png', this.userId);
-        logger.debug('[GeminiImageGen] Image saved locally successfully');
-        // Keep using data URL for response to avoid MIME type issues
-      } catch (error) {
-        logger.error('[GeminiImageGen] Local save failed:', error);
-        // Still continue with data URL
-      }
+  const streamMethods = {};
+  const requestFilesMap = Object.fromEntries(imageFiles.map((f) => [f.file_id, { ...f }]));
+  const orderedFiles = new Array(image_ids.length);
+  const idsToFetch = [];
+  const indexOfMissing = Object.create(null);
+
+  for (let i = 0; i < image_ids.length; i++) {
+    const id = image_ids[i];
+    const file = requestFilesMap[id];
+    if (file) {
+      orderedFiles[i] = file;
     } else {
-      // For S3/cloud strategies, follow OpenAI pattern exactly
-      logger.debug('[GeminiImageGen] Cloud strategy detected - using OpenAI pattern');
-      try {
-        const storageUrl = await saveBase64ImageToStorage({
-          base64Data: imageData,
-          outputFormat: 'png',
-          processFileURL: this.processFileURL,
-          fileStrategy: this.fileStrategy,
-          userId: this.userId,
-        });
+      idsToFetch.push(id);
+      indexOfMissing[id] = i;
+    }
+  }
 
-        if (storageUrl) {
-          imageUrl = storageUrl;
-          logger.debug('[GeminiImageGen] Image saved to storage:', storageUrl);
-        } else {
-          logger.warn('[GeminiImageGen] Could not save to storage, using data URL');
-        }
-      } catch (error) {
-        logger.error('[GeminiImageGen] Error saving image to storage:', error);
-        logger.warn('[GeminiImageGen] Falling back to data URL');
+  if (idsToFetch.length && req?.user?.id) {
+    const fetchedFiles = await getFiles(
+      {
+        user: req.user.id,
+        file_id: { $in: idsToFetch },
+        height: { $exists: true },
+        width: { $exists: true },
+      },
+      {},
+      {},
+    );
+
+    for (const file of fetchedFiles) {
+      requestFilesMap[file.file_id] = file;
+      orderedFiles[indexOfMissing[file.file_id]] = file;
+    }
+  }
+
+  const inlineDataArray = [];
+  for (const imageFile of orderedFiles) {
+    if (!imageFile) continue;
+
+    try {
+      const source = imageFile.source || fileStrategy;
+      if (!source) continue;
+
+      let getDownloadStream = streamMethods[source];
+      if (!getDownloadStream) {
+        ({ getDownloadStream } = getStrategyFunctions(source));
+        streamMethods[source] = getDownloadStream;
+      }
+      if (!getDownloadStream) continue;
+
+      const stream = await getDownloadStream(req, imageFile.filepath);
+      if (!stream) continue;
+
+      const chunks = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+      const buffer = Buffer.concat(chunks);
+      const base64Data = buffer.toString('base64');
+      const mimeType = imageFile.type || 'image/png';
+
+      inlineDataArray.push({
+        inlineData: { mimeType, data: base64Data },
+      });
+    } catch (error) {
+      logger.error('[GeminiImageGen] Error processing image:', imageFile.file_id, error);
+    }
+  }
+
+  return inlineDataArray;
+}
+
+/**
+ * Check for safety blocks in API response
+ * @param {Object} response - The API response
+ * @returns {Object|null} - Safety block info or null
+ */
+function checkForSafetyBlock(response) {
+  if (!response?.candidates?.length) {
+    return { reason: 'NO_CANDIDATES', message: 'No candidates returned' };
+  }
+
+  const candidate = response.candidates[0];
+  const finishReason = candidate.finishReason;
+
+  if (finishReason === 'SAFETY' || finishReason === 'PROHIBITED_CONTENT') {
+    return { reason: finishReason, message: 'Content blocked by safety filters' };
+  }
+
+  if (finishReason === 'RECITATION') {
+    return { reason: finishReason, message: 'Content blocked due to recitation concerns' };
+  }
+
+  if (candidate.safetyRatings) {
+    for (const rating of candidate.safetyRatings) {
+      if (rating.probability === 'HIGH' || rating.blocked === true) {
+        return {
+          reason: 'SAFETY_RATING',
+          message: `Blocked due to ${rating.category}`,
+          category: rating.category,
+        };
       }
     }
+  }
 
-    // FOLLOW OPENAI RESPONSE PATTERN EXACTLY
+  return null;
+}
 
-    const content = [
+/**
+ * Record token usage for balance tracking
+ * @param {Object} params - Parameters
+ * @param {Object} params.usageMetadata - The usage metadata from API response
+ * @param {Object} params.req - The request object
+ * @param {string} params.userId - The user ID
+ * @param {string} params.conversationId - The conversation ID
+ * @param {string} params.model - The model name
+ */
+async function recordTokenUsage({ usageMetadata, req, userId, conversationId, model }) {
+  if (!usageMetadata) {
+    logger.debug('[GeminiImageGen] No usage metadata available for balance tracking');
+    return;
+  }
+
+  const appConfig = req?.config;
+  const balance = getBalanceConfig(appConfig);
+  const transactions = getTransactionsConfig(appConfig);
+
+  // Skip if neither balance nor transactions are enabled
+  if (!balance?.enabled && transactions?.enabled === false) {
+    return;
+  }
+
+  const promptTokens = usageMetadata.prompt_token_count || usageMetadata.promptTokenCount || 0;
+  const completionTokens =
+    usageMetadata.candidates_token_count || usageMetadata.candidatesTokenCount || 0;
+
+  if (promptTokens === 0 && completionTokens === 0) {
+    logger.debug('[GeminiImageGen] No tokens to record');
+    return;
+  }
+
+  logger.debug('[GeminiImageGen] Recording token usage:', {
+    promptTokens,
+    completionTokens,
+    model,
+    conversationId,
+  });
+
+  try {
+    await spendTokens(
       {
-        type: ContentTypes.IMAGE_URL,
-        image_url: {
-          url: imageUrl,
-        },
+        user: userId,
+        model,
+        conversationId,
+        context: 'image_generation',
+        balance,
+        transactions,
       },
-    ];
-
-    const file_ids = [v4()];
-    const textResponse = [
       {
-        type: ContentTypes.TEXT,
-        text:
-          displayMessage +
-          `\n\ngenerated_image_id: "${file_ids[0]}"` +
-          (image_ids && image_ids.length > 0
-            ? `\nreferenced_image_ids: ["${image_ids.join('", "')}"]`
-            : ''),
+        promptTokens,
+        completionTokens,
       },
-    ];
-
-    return [textResponse, { content, file_ids }];
+    );
+  } catch (error) {
+    logger.error('[GeminiImageGen] Error recording token usage:', error);
   }
 }
 
-module.exports = GeminiImageGen;
+/**
+ * Creates Gemini Image Generation tool
+ * @param {Object} fields - Configuration fields
+ * @returns {ReturnType<tool>} - The image generation tool
+ */
+function createGeminiImageTool(fields = {}) {
+  const override = fields.override ?? false;
+
+  if (!override && !fields.isAgent) {
+    throw new Error('This tool is only available for agents.');
+  }
+
+  // Skip validation during tool creation - validation happens at runtime in initializeGeminiClient
+  // This allows the tool to be added to agents when using Vertex AI without requiring API keys
+  // The actual credentials check happens when the tool is invoked
+
+  const {
+    req,
+    imageFiles = [],
+    processFileURL,
+    userId,
+    fileStrategy,
+    GEMINI_API_KEY,
+    GOOGLE_KEY,
+    // GEMINI_VERTEX_ENABLED is used for auth validation only (not used in code)
+    // When set as env var, it signals Vertex AI is configured and bypasses API key requirement
+  } = fields;
+
+  const imageOutputType = fields.imageOutputType || EImageOutputType.PNG;
+
+  const geminiImageGenTool = tool(
+    async ({ prompt, image_ids, aspectRatio, imageSize }, _runnableConfig) => {
+      if (!prompt) {
+        throw new Error('Missing required field: prompt');
+      }
+
+      logger.debug('[GeminiImageGen] Generating image with prompt:', prompt?.substring(0, 100));
+      logger.debug('[GeminiImageGen] Options:', { aspectRatio, imageSize });
+
+      // Initialize Gemini client with user-provided credentials
+      let ai;
+      try {
+        ai = await initializeGeminiClient({
+          GEMINI_API_KEY,
+          GOOGLE_KEY,
+        });
+      } catch (error) {
+        logger.error('[GeminiImageGen] Failed to initialize client:', error);
+        return [
+          [{ type: ContentTypes.TEXT, text: `Failed to initialize Gemini: ${error.message}` }],
+          { content: [], file_ids: [] },
+        ];
+      }
+
+      // Build request contents
+      const contents = [{ text: replaceUnwantedChars(prompt) }];
+
+      // Add context images if provided
+      if (image_ids?.length > 0) {
+        const contextImages = await convertImagesToInlineData({
+          imageFiles,
+          image_ids,
+          req,
+          fileStrategy,
+        });
+        contents.push(...contextImages);
+        logger.debug('[GeminiImageGen] Added', contextImages.length, 'context images');
+      }
+
+      // Generate image
+      let apiResponse;
+      const geminiModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+      try {
+        // Build config with optional imageConfig
+        const config = {
+          responseModalities: ['TEXT', 'IMAGE'],
+        };
+
+        // Add imageConfig if aspectRatio or imageSize is specified
+        // Note: gemini-2.5-flash-image doesn't support imageSize
+        const supportsImageSize = !geminiModel.includes('gemini-2.5-flash-image');
+        if (aspectRatio || (imageSize && supportsImageSize)) {
+          config.imageConfig = {};
+          if (aspectRatio) {
+            config.imageConfig.aspectRatio = aspectRatio;
+          }
+          if (imageSize && supportsImageSize) {
+            config.imageConfig.imageSize = imageSize;
+          }
+        }
+
+        apiResponse = await ai.models.generateContent({
+          model: geminiModel,
+          contents,
+          config,
+        });
+      } catch (error) {
+        logger.error('[GeminiImageGen] API error:', error);
+        return [
+          [{ type: ContentTypes.TEXT, text: `Image generation failed: ${error.message}` }],
+          { content: [], file_ids: [] },
+        ];
+      }
+
+      // Check for safety blocks
+      const safetyBlock = checkForSafetyBlock(apiResponse);
+      if (safetyBlock) {
+        logger.warn('[GeminiImageGen] Safety block:', safetyBlock);
+        const errorMsg = 'Image blocked by content safety filters. Please try different content.';
+        return [[{ type: ContentTypes.TEXT, text: errorMsg }], { content: [], file_ids: [] }];
+      }
+
+      const rawImageData = apiResponse.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)
+        ?.inlineData?.data;
+
+      if (!rawImageData) {
+        logger.warn('[GeminiImageGen] No image data in response');
+        return [
+          [{ type: ContentTypes.TEXT, text: 'No image was generated. Please try again.' }],
+          { content: [], file_ids: [] },
+        ];
+      }
+
+      const rawBuffer = Buffer.from(rawImageData, 'base64');
+      const { buffer: convertedBuffer, format: outputFormat } = await convertImageFormat(
+        rawBuffer,
+        imageOutputType,
+      );
+      const imageData = convertedBuffer.toString('base64');
+      const mimeType = outputFormat === 'jpeg' ? 'image/jpeg' : `image/${outputFormat}`;
+
+      logger.debug('[GeminiImageGen] Image format:', { outputFormat, mimeType });
+
+      let imageUrl;
+      const useLocalStorage = !fileStrategy || fileStrategy === FileSources.local;
+
+      if (useLocalStorage) {
+        try {
+          imageUrl = await saveImageLocally(imageData, outputFormat, userId);
+        } catch (error) {
+          logger.error('[GeminiImageGen] Local save failed:', error);
+          imageUrl = `data:${mimeType};base64,${imageData}`;
+        }
+      } else {
+        const cloudUrl = await saveToCloudStorage({
+          base64Data: imageData,
+          format: outputFormat,
+          processFileURL,
+          fileStrategy,
+          userId,
+        });
+
+        if (cloudUrl) {
+          imageUrl = cloudUrl;
+        } else {
+          // Fallback to local
+          try {
+            imageUrl = await saveImageLocally(imageData, outputFormat, userId);
+          } catch (_error) {
+            imageUrl = `data:${mimeType};base64,${imageData}`;
+          }
+        }
+      }
+
+      logger.debug('[GeminiImageGen] Image URL:', imageUrl);
+
+      // For the artifact, we need a data URL (same as OpenAI)
+      // The local file save is for persistence, but the response needs a data URL
+      const dataUrl = `data:${mimeType};base64,${imageData}`;
+
+      // Return in content_and_artifact format (same as OpenAI)
+      const file_ids = [v4()];
+      const content = [
+        {
+          type: ContentTypes.IMAGE_URL,
+          image_url: { url: dataUrl },
+        },
+      ];
+
+      const textResponse = [
+        {
+          type: ContentTypes.TEXT,
+          text:
+            displayMessage +
+            `\n\ngenerated_image_id: "${file_ids[0]}"` +
+            (image_ids?.length > 0 ? `\nreferenced_image_ids: ["${image_ids.join('", "')}"]` : ''),
+        },
+      ];
+
+      // Record token usage for balance tracking (don't await to avoid blocking response)
+      const conversationId = _runnableConfig?.configurable?.thread_id;
+      recordTokenUsage({
+        usageMetadata: apiResponse.usageMetadata,
+        req,
+        userId,
+        conversationId,
+        model: geminiModel,
+      }).catch((error) => {
+        logger.error('[GeminiImageGen] Failed to record token usage:', error);
+      });
+
+      return [textResponse, { content, file_ids }];
+    },
+    {
+      ...geminiToolkit.gemini_image_gen,
+      responseFormat: 'content_and_artifact',
+    },
+  );
+
+  return geminiImageGenTool;
+}
+
+// Export both for compatibility
+module.exports = createGeminiImageTool;
+module.exports.createGeminiImageTool = createGeminiImageTool;

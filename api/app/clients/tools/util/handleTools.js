@@ -10,6 +10,7 @@ const {
   createSafeUser,
   mcpToolPattern,
   loadWebSearchAuth,
+  buildImageToolContext,
 } = require('@librechat/api');
 const { getMCPServersRegistry } = require('~/config');
 const {
@@ -33,9 +34,8 @@ const {
   StructuredACS,
   TraversaalSearch,
   StructuredWolfram,
-  createYouTubeTools,
   TavilySearchResults,
-  GeminiImageGen,
+  createGeminiImageTool,
   createOpenAIImageTools,
 } = require('../');
 const { primeFiles: primeCodeFiles } = require('~/server/services/Files/Code/process');
@@ -181,34 +181,18 @@ const loadTools = async ({
     'azure-ai-search': StructuredACS,
     traversaal_search: TraversaalSearch,
     tavily_search_results_json: TavilySearchResults,
-    gemini_image_gen: GeminiImageGen,
   };
 
   const customConstructors = {
-    youtube: async (_toolContextMap) => {
-      const authFields = getAuthFields('youtube');
-      const authValues = await loadAuthValues({ userId: user, authFields });
-      return createYouTubeTools(authValues);
-    },
     image_gen_oai: async (toolContextMap) => {
       const authFields = getAuthFields('image_gen_oai');
       const authValues = await loadAuthValues({ userId: user, authFields });
       const imageFiles = options.tool_resources?.[EToolResources.image_edit]?.files ?? [];
-      let toolContext = '';
-      for (let i = 0; i < imageFiles.length; i++) {
-        const file = imageFiles[i];
-        if (!file) {
-          continue;
-        }
-        if (i === 0) {
-          toolContext =
-            'Image files provided in this request (their image IDs listed in order of appearance) available for image editing:';
-        }
-        toolContext += `\n\t- ${file.file_id}`;
-        if (i === imageFiles.length - 1) {
-          toolContext += `\n\nInclude any you need in the \`image_ids\` array when calling \`${EToolResources.image_edit}_oai\`. You may also include previously referenced or generated image IDs.`;
-        }
-      }
+      const toolContext = buildImageToolContext({
+        imageFiles,
+        toolName: `${EToolResources.image_edit}_oai`,
+        contextDescription: 'image editing',
+      });
       if (toolContext) {
         toolContextMap.image_edit_oai = toolContext;
       }
@@ -225,77 +209,22 @@ const loadTools = async ({
       const authFields = getAuthFields('gemini_image_gen');
       const authValues = await loadAuthValues({ userId: user, authFields });
       const imageFiles = options.tool_resources?.[EToolResources.image_edit]?.files ?? [];
-      let toolContext = '';
-      for (let i = 0; i < imageFiles.length; i++) {
-        const file = imageFiles[i];
-        if (!file) {
-          continue;
-        }
-        if (i === 0) {
-          toolContext =
-            'Image files provided in this request (their image IDs listed in order of appearance) available for image context:';
-        }
-        toolContext += `\n\t- ${file.file_id}`;
-        if (i === imageFiles.length - 1) {
-          toolContext += `\n\nInclude any you need in the \`image_ids\` array when calling \`gemini_image_gen\` to use them as visual context for generation. You may also include previously referenced or generated image IDs.`;
-        }
-      }
+      const toolContext = buildImageToolContext({
+        imageFiles,
+        toolName: 'gemini_image_gen',
+        contextDescription: 'image context',
+      });
       if (toolContext) {
         toolContextMap.gemini_image_gen = toolContext;
       }
-      return new GeminiImageGen({
+      return createGeminiImageTool({
         ...authValues,
         isAgent: !!agent,
         req: options.req,
         imageFiles,
         processFileURL: options.processFileURL,
         userId: user,
-        fileStrategy: options.fileStrategy,
-      });
-    },
-    flux: async (toolContextMap) => {
-      const authFields = getAuthFields('flux');
-      const authValues = await loadAuthValues({ userId: user, authFields });
-      
-      // Get image files for editing if available
-      const imageFiles = options.tool_resources?.[EToolResources.image_edit]?.files ?? [];
-      
-      // Create context for image files if they exist
-      let toolContext = '';
-      let image_ids = [];
-      if (imageFiles.length > 0) {
-        toolContext = 'Image files provided in this request (their image IDs listed in order of appearance) available for image editing with Flux Kontext Pro:';
-        
-        for (let i = 0; i < imageFiles.length; i++) {
-          const file = imageFiles[i];
-          if (!file) continue;
-          
-          toolContext += `\n\t- ${file.file_id}`;
-          image_ids.push(file.file_id);
-        }
-        
-        toolContext += `\n\nInclude any you need in the \`image_ids\` array when calling \`flux\` with action="edit". Note that Flux Kontext Pro only supports editing one image at a time.`;
-        toolContext += `\n\nFor image generation, use action="generate" (default) and provide a detailed prompt.`;
-      } else {
-        toolContext = `# \`flux\`:
-1. Use this tool to generate or edit images with Flux Kontext Pro.
-2. For generation, provide a detailed text prompt describing the image you want.
-3. For editing, provide image_ids and a text prompt describing the changes you want.
-4. Be specific and detailed in your prompt for best results.
-5. The image will be displayed in the chat.`;
-      }
-      
-      toolContextMap.flux = toolContext;
-      
-      return new FluxAPI({
-        ...authValues,
-        userId: user,
-        fileStrategy: options.fileStrategy,
-        isAgent: !!agent,
-        returnMetadata: options.returnMetadata,
-        processFileURL: options.processFileURL,
-        image_ids,
-        ...toolOptions.flux,
+        fileStrategy,
       });
     },
   };
@@ -320,7 +249,6 @@ const loadTools = async ({
     flux: imageGenOptions,
     dalle: imageGenOptions,
     'stable-diffusion': imageGenOptions,
-    serpapi: { location: 'Austin,Texas,United States', hl: 'en', gl: 'us' },
     gemini_image_gen: imageGenOptions,
   };
 
