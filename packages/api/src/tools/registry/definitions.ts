@@ -610,18 +610,99 @@ const agentBuiltins = [
     | undefined,
 ].filter((tool): tool is { name: string; description: string; schema: unknown } => Boolean(tool));
 
-/** Tool definitions from @librechat/agents (guarded for version compatibility) */
-const agentToolDefinitions: Record<string, ToolRegistryDefinition> = Object.fromEntries(
-  agentBuiltins.map((tool) => [
-    tool.name,
+const fallbackAgentBuiltins: Array<{ name: string; description: string; schema: ExtendedJsonSchema }> =
+  [
     {
-      name: tool.name,
-      description: tool.description,
-      schema: tool.schema as ExtendedJsonSchema,
-      toolType: 'builtin',
+      name: 'calculator',
+      description: 'Evaluate mathematical expressions and return computed results.',
+      schema: {
+        type: 'object',
+        properties: {
+          expression: {
+            type: 'string',
+            description: 'A valid mathematical expression to evaluate.',
+          },
+        },
+        required: ['expression'],
+      },
     },
-  ]),
-);
+    {
+      name: 'web_search',
+      description: 'Search the web for relevant, up-to-date information.',
+      schema: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'The search query.',
+          },
+        },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'execute_code',
+      description: 'Execute code in a sandboxed runtime for programmatic analysis.',
+      schema: {
+        type: 'object',
+        properties: {
+          lang: {
+            type: 'string',
+            description: 'Programming language used for execution.',
+          },
+          code: {
+            type: 'string',
+            description: 'Code to execute.',
+          },
+        },
+        required: ['lang', 'code'],
+      },
+    },
+    {
+      name: 'code_execution',
+      description: 'Execute code in a sandboxed runtime for programmatic analysis.',
+      schema: {
+        type: 'object',
+        properties: {
+          lang: {
+            type: 'string',
+            description: 'Programming language used for execution.',
+          },
+          code: {
+            type: 'string',
+            description: 'Code to execute.',
+          },
+        },
+        required: ['lang', 'code'],
+      },
+    },
+  ];
+
+/** Tool definitions from @librechat/agents (guarded for version compatibility) */
+const agentToolDefinitions: Record<string, ToolRegistryDefinition> = {
+  ...Object.fromEntries(
+    fallbackAgentBuiltins.map((tool) => [
+      tool.name,
+      {
+        name: tool.name,
+        description: tool.description,
+        schema: tool.schema,
+        toolType: 'builtin' as const,
+      },
+    ]),
+  ),
+  ...Object.fromEntries(
+    agentBuiltins.map((tool) => [
+      tool.name,
+      {
+        name: tool.name,
+        description: tool.description,
+        schema: tool.schema as ExtendedJsonSchema,
+        toolType: 'builtin' as const,
+      },
+    ]),
+  ),
+};
 
 export function getToolDefinition(toolName: string): ToolRegistryDefinition | undefined {
   return toolDefinitions[toolName] ?? agentToolDefinitions[toolName];

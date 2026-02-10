@@ -33,6 +33,36 @@ const ProgrammaticToolCallingDefinition = (
   | { name: string; description?: string; schema?: unknown }
   | undefined;
 
+const toolSearchDefinition = ToolSearchToolDefinition ?? {
+  name: 'tool_search',
+  description: 'Search available tools and return best matches for a task.',
+  schema: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'Search query for tool discovery.',
+      },
+    },
+    required: ['query'],
+  },
+};
+
+const programmaticToolCallingDefinition = ProgrammaticToolCallingDefinition ?? {
+  name: 'run_tools_with_code',
+  description: 'Run tools programmatically via code execution.',
+  schema: {
+    type: 'object',
+    properties: {
+      code: {
+        type: 'string',
+        description: 'Code that invokes tools programmatically.',
+      },
+    },
+    required: ['code'],
+  },
+};
+
 export interface ToolDefinition {
   name: string;
   description?: string;
@@ -326,14 +356,14 @@ export async function buildToolClassification(
     }
 
     /** Add ToolSearch definition for event-driven mode if available in installed agents package */
-    if (ToolSearchToolDefinition?.name) {
+    if (toolSearchDefinition.name) {
       toolDefinitions.push({
-        name: ToolSearchToolDefinition.name,
-        description: ToolSearchToolDefinition.description,
-        parameters: ToolSearchToolDefinition.schema as unknown as LCTool['parameters'],
+        name: toolSearchDefinition.name,
+        description: toolSearchDefinition.description,
+        parameters: toolSearchDefinition.schema as unknown as LCTool['parameters'],
       });
-      toolRegistry.set(ToolSearchToolDefinition.name, {
-        name: ToolSearchToolDefinition.name,
+      toolRegistry.set(toolSearchDefinition.name, {
+        name: toolSearchDefinition.name,
         allowed_callers: ['direct'],
       });
     }
@@ -348,14 +378,14 @@ export async function buildToolClassification(
 
   /** In definitions-only mode, add PTC definition without creating the tool instance */
   if (definitionsOnly) {
-    if (ProgrammaticToolCallingDefinition?.name) {
+    if (programmaticToolCallingDefinition.name) {
       toolDefinitions.push({
-        name: ProgrammaticToolCallingDefinition.name,
-        description: ProgrammaticToolCallingDefinition.description,
-        parameters: ProgrammaticToolCallingDefinition.schema as unknown as LCTool['parameters'],
+        name: programmaticToolCallingDefinition.name,
+        description: programmaticToolCallingDefinition.description,
+        parameters: programmaticToolCallingDefinition.schema as unknown as LCTool['parameters'],
       });
-      toolRegistry.set(ProgrammaticToolCallingDefinition.name, {
-        name: ProgrammaticToolCallingDefinition.name,
+      toolRegistry.set(programmaticToolCallingDefinition.name, {
+        name: programmaticToolCallingDefinition.name,
         allowed_callers: ['direct'],
       });
     }
@@ -381,14 +411,14 @@ export async function buildToolClassification(
     additionalTools.push(ptcTool);
 
     /** Add PTC definition for event-driven mode if available in installed agents package */
-    if (ProgrammaticToolCallingDefinition?.name) {
+    if (programmaticToolCallingDefinition.name) {
       toolDefinitions.push({
-        name: ProgrammaticToolCallingDefinition.name,
-        description: ProgrammaticToolCallingDefinition.description,
-        parameters: ProgrammaticToolCallingDefinition.schema as unknown as LCTool['parameters'],
+        name: programmaticToolCallingDefinition.name,
+        description: programmaticToolCallingDefinition.description,
+        parameters: programmaticToolCallingDefinition.schema as unknown as LCTool['parameters'],
       });
-      toolRegistry.set(ProgrammaticToolCallingDefinition.name, {
-        name: ProgrammaticToolCallingDefinition.name,
+      toolRegistry.set(programmaticToolCallingDefinition.name, {
+        name: programmaticToolCallingDefinition.name,
         allowed_callers: ['direct'],
       });
     }
