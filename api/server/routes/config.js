@@ -53,6 +53,7 @@ router.get('/', async function (req, res) {
       !!process.env.OPENID_CLIENT_ID &&
       !!process.env.OPENID_CLIENT_SECRET &&
       !!process.env.OPENID_ISSUER &&
+      !!process.env.OPENID_SCOPE &&
       !!process.env.OPENID_SESSION_SECRET;
 
     const isSamlEnabled =

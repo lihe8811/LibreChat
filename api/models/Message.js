@@ -284,14 +284,24 @@ async function updateMessage(req, message, metadata) {
  */
 async function deleteMessagesSince(req, { messageId, conversationId }) {
   try {
-    const message = await Message.findOne({ messageId, user: req.user.id }).lean();
+    const messages = await Message.find({ conversationId, user: req.user.id })
+      .select('_id messageId createdAt')
+      .sort({ createdAt: 1, _id: 1 })
+      .lean();
 
-    if (message) {
-      const query = Message.find({ conversationId, user: req.user.id });
-      return await query.deleteMany({
-        createdAt: { $gt: message.createdAt },
+    const targetIndex = messages.findIndex((msg) => msg.messageId === messageId);
+    if (targetIndex !== -1) {
+      const idsToDelete = messages.slice(targetIndex + 1).map((msg) => msg._id);
+      if (idsToDelete.length === 0) {
+        return { acknowledged: true, deletedCount: 0 };
+      }
+
+      return await Message.deleteMany({
+        _id: { $in: idsToDelete },
+        user: req.user.id,
       });
     }
+
     return undefined;
   } catch (err) {
     logger.error('Error deleting messages:', err);

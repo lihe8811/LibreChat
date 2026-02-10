@@ -1,8 +1,4 @@
-import {
-  WebSearchToolDefinition,
-  CalculatorToolDefinition,
-  CodeExecutionToolDefinition,
-} from '@librechat/agents';
+import * as Agents from '@librechat/agents';
 
 /** Extended JSON Schema type that includes standard validation keywords */
 export type ExtendedJsonSchema = {
@@ -602,27 +598,30 @@ Generated image IDs will be returned in the response, so you can refer to them i
   },
 };
 
-/** Tool definitions from @librechat/agents */
-const agentToolDefinitions: Record<string, ToolRegistryDefinition> = {
-  [CalculatorToolDefinition.name]: {
-    name: CalculatorToolDefinition.name,
-    description: CalculatorToolDefinition.description,
-    schema: CalculatorToolDefinition.schema as unknown as ExtendedJsonSchema,
-    toolType: 'builtin',
-  },
-  [CodeExecutionToolDefinition.name]: {
-    name: CodeExecutionToolDefinition.name,
-    description: CodeExecutionToolDefinition.description,
-    schema: CodeExecutionToolDefinition.schema as unknown as ExtendedJsonSchema,
-    toolType: 'builtin',
-  },
-  [WebSearchToolDefinition.name]: {
-    name: WebSearchToolDefinition.name,
-    description: WebSearchToolDefinition.description,
-    schema: WebSearchToolDefinition.schema as unknown as ExtendedJsonSchema,
-    toolType: 'builtin',
-  },
-};
+const agentBuiltins = [
+  (Agents as Record<string, unknown>).CalculatorToolDefinition as
+    | { name: string; description: string; schema: unknown }
+    | undefined,
+  (Agents as Record<string, unknown>).CodeExecutionToolDefinition as
+    | { name: string; description: string; schema: unknown }
+    | undefined,
+  (Agents as Record<string, unknown>).WebSearchToolDefinition as
+    | { name: string; description: string; schema: unknown }
+    | undefined,
+].filter((tool): tool is { name: string; description: string; schema: unknown } => Boolean(tool));
+
+/** Tool definitions from @librechat/agents (guarded for version compatibility) */
+const agentToolDefinitions: Record<string, ToolRegistryDefinition> = Object.fromEntries(
+  agentBuiltins.map((tool) => [
+    tool.name,
+    {
+      name: tool.name,
+      description: tool.description,
+      schema: tool.schema as ExtendedJsonSchema,
+      toolType: 'builtin',
+    },
+  ]),
+);
 
 export function getToolDefinition(toolName: string): ToolRegistryDefinition | undefined {
   return toolDefinitions[toolName] ?? agentToolDefinitions[toolName];

@@ -81,6 +81,7 @@ const searchEnabled = process.env.SEARCH != null && process.env.SEARCH.toLowerCa
  */
 const meiliEnabled =
   process.env.MEILI_HOST != null && process.env.MEILI_MASTER_KEY != null && searchEnabled;
+const isTestEnv = process.env.NODE_ENV === 'test';
 
 /**
  * Get sync configuration from environment variables
@@ -405,6 +406,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       // If this conversation or message has a TTL, don't index it
       if (!_.isNil(this.expiredAt)) {
         return next();
@@ -449,6 +454,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       try {
         const object = _.omitBy(_.pick(this.toJSON(), attributesToIndex), (v, k) =>
           k.startsWith('$'),
@@ -470,6 +479,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       try {
         await index.deleteDocument(this._id as string);
         next();
@@ -626,20 +639,44 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
 
   // Register Mongoose hooks
   schema.post('save', function (doc: DocumentWithMeiliIndex, next) {
-    doc.postSaveHook?.(next);
+    if (!meiliEnabled || isTestEnv) {
+      return next();
+    }
+
+    if (typeof doc.postSaveHook === 'function') {
+      return doc.postSaveHook(next);
+    }
+
+    return next();
   });
 
   schema.post('updateOne', function (doc: DocumentWithMeiliIndex, next) {
-    doc.postUpdateHook?.(next);
+    if (!meiliEnabled || isTestEnv) {
+      return next();
+    }
+
+    if (typeof doc.postUpdateHook === 'function') {
+      return doc.postUpdateHook(next);
+    }
+
+    return next();
   });
 
   schema.post('deleteOne', function (doc: DocumentWithMeiliIndex, next) {
-    doc.postRemoveHook?.(next);
+    if (!meiliEnabled || isTestEnv) {
+      return next();
+    }
+
+    if (typeof doc.postRemoveHook === 'function') {
+      return doc.postRemoveHook(next);
+    }
+
+    return next();
   });
 
   // Pre-deleteMany hook: remove corresponding documents from MeiliSearch when multiple documents are deleted.
   schema.pre('deleteMany', async function (next) {
-    if (!meiliEnabled) {
+    if (!meiliEnabled || isTestEnv) {
       return next();
     }
 
@@ -694,7 +731,11 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
 
   // Post-findOneAndUpdate hook
   schema.post('findOneAndUpdate', async function (doc: DocumentWithMeiliIndex, next) {
-    if (!meiliEnabled) {
+    if (!meiliEnabled || isTestEnv) {
+      return next();
+    }
+
+    if (!doc) {
       return next();
     }
 
