@@ -1382,6 +1382,10 @@ export enum CacheKeys {
    */
   CONFIG_STORE = 'CONFIG_STORE',
   /**
+   * Key for the tool cache namespace (plugins, MCP tools, tool definitions).
+   */
+  TOOL_CACHE = 'TOOL_CACHE',
+  /**
    * Key for the roles cache.
    */
   ROLES = 'ROLES',
