@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ZodError } from 'zod';
 import type { TEndpointsConfig, TModelsConfig, TConfig } from './types';
-import { EModelEndpoint, eModelEndpointSchema } from './schemas';
+import { EModelEndpoint, eModelEndpointSchema, isAgentsEndpoint } from './schemas';
 import { specsConfigSchema, TSpecsConfig } from './models';
 import { fileConfigSchema } from './file-config';
 import { apiBaseUrl } from './api-endpoints';
@@ -836,6 +836,7 @@ export enum OCRStrategy {
   CUSTOM_OCR = 'custom_ocr',
   AZURE_MISTRAL_OCR = 'azure_mistral_ocr',
   VERTEXAI_MISTRAL_OCR = 'vertexai_mistral_ocr',
+  DOCUMENT_PARSER = 'document_parser',
 }
 
 export enum SearchCategories {
@@ -1117,6 +1118,10 @@ export const alternateName = {
 };
 
 const sharedOpenAIModels = [
+  'gpt-5.4',
+  // TODO: gpt-5.4-thinking may have separate reasoning token pricing — verify before release
+  'gpt-5.4-thinking',
+  'gpt-5.4-pro',
   'gpt-5.1',
   'gpt-5.1-chat-latest',
   'gpt-5.1-codex',
@@ -1150,6 +1155,7 @@ const sharedOpenAIModels = [
 ];
 
 const sharedAnthropicModels = [
+  'claude-sonnet-4-6',
   'claude-opus-4-6',
   'claude-sonnet-4-5',
   'claude-sonnet-4-5-20250929',
@@ -1171,6 +1177,7 @@ const sharedAnthropicModels = [
 ];
 
 export const bedrockModels = [
+  'anthropic.claude-sonnet-4-6',
   'anthropic.claude-opus-4-6-v1',
   'anthropic.claude-sonnet-4-5-20250929-v1:0',
   'anthropic.claude-haiku-4-5-20251001-v1:0',
@@ -1207,6 +1214,13 @@ export const defaultModels = {
   [EModelEndpoint.assistants]: [...sharedOpenAIModels, 'chatgpt-4o-latest'],
   [EModelEndpoint.agents]: sharedOpenAIModels, // TODO: Add agent models (agentsModels)
   [EModelEndpoint.google]: [
+    // Gemini 3.1 Models
+    'gemini-3.1-pro-preview',
+    'gemini-3.1-pro-preview-customtools',
+    'gemini-3.1-flash-lite-preview',
+    // Gemini 3 Models
+    'gemini-3-pro-preview',
+    'gemini-3-flash-preview',
     // Gemini 2.5 Models
     'gemini-2.5-pro',
     'gemini-2.5-flash',
@@ -1283,6 +1297,7 @@ export const visionModels = [
   'o4-mini',
   'o3',
   'o1',
+  'gpt-5',
   'gpt-4.1',
   'gpt-4.5',
   'llava',
@@ -1738,9 +1753,9 @@ export enum TTSProviders {
 /** Enum for app-wide constants */
 export enum Constants {
   /** Key for the app's version. */
-  VERSION = 'v0.8.2',
+  VERSION = 'v0.8.3',
   /** Key for the Custom Config's version (librechat.yaml). */
-  CONFIG_VERSION = '1.3.3',
+  CONFIG_VERSION = '1.3.6',
   /** Standard value for the first message's `parentMessageId` value, to indicate no parent exists. */
   NO_PARENT = '00000000-0000-0000-0000-000000000000',
   /** Standard value to use whatever the submission prelim. `responseMessageId` is */
@@ -1775,6 +1790,8 @@ export enum Constants {
   mcp_all = 'sys__all__sys',
   /** Unique value to indicate clearing MCP servers from UI state. For frontend use only. */
   mcp_clear = 'sys__clear__sys',
+  /** Key suffix for non-spec user default tool storage */
+  spec_defaults_key = '__defaults__',
   /**
    * Unique value to indicate the MCP tool was added to an agent.
    * This helps inform the UI if the mcp server was previously added.
@@ -1924,4 +1941,47 @@ export function getEndpointField<
     return undefined;
   }
   return config[property];
+}
+
+/**
+ * Resolves the effective endpoint type:
+ * - Non-agents endpoint: config.type || endpoint
+ * - Agents + provider: config[provider].type || provider
+ * - Agents, no provider: EModelEndpoint.agents
+ *
+ * Returns `undefined` when endpoint is null/undefined.
+ */
+export function resolveEndpointType(
+  endpointsConfig: TEndpointsConfig | undefined | null,
+  endpoint: string | null | undefined,
+  agentProvider?: string | null,
+): EModelEndpoint | string | undefined {
+  if (!endpoint) {
+    return undefined;
+  }
+
+  if (!isAgentsEndpoint(endpoint)) {
+    return getEndpointField(endpointsConfig, endpoint, 'type') || endpoint;
+  }
+
+  if (agentProvider) {
+    const providerType = getEndpointField(endpointsConfig, agentProvider, 'type');
+    if (providerType) {
+      return providerType;
+    }
+    return agentProvider;
+  }
+
+  return EModelEndpoint.agents;
+}
+
+/** Resolves the `defaultParamsEndpoint` for a given endpoint from its custom params config */
+export function getDefaultParamsEndpoint(
+  endpointsConfig: TEndpointsConfig | undefined | null,
+  endpoint: string | null | undefined,
+): string | undefined {
+  if (!endpointsConfig || !endpoint) {
+    return undefined;
+  }
+  return endpointsConfig[endpoint]?.customParams?.defaultParamsEndpoint;
 }

@@ -1,6 +1,6 @@
+const undici = require('undici');
 const fetch = require('node-fetch');
 const jwtDecode = require('jsonwebtoken/decode');
-const undici = require('undici');
 const { ErrorTypes } = require('librechat-data-provider');
 const { findUser, createUser, updateUser } = require('~/models');
 const { setupOpenId } = require('./openidStrategy');
@@ -152,6 +152,7 @@ describe('setupOpenId', () => {
     process.env.OPENID_ADMIN_ROLE_TOKEN_KIND = 'id';
     delete process.env.OPENID_USERNAME_CLAIM;
     delete process.env.OPENID_NAME_CLAIM;
+    delete process.env.OPENID_EMAIL_CLAIM;
     delete process.env.PROXY;
     delete process.env.OPENID_USE_PKCE;
 
@@ -382,6 +383,62 @@ describe('setupOpenId', () => {
     // Assert – verify that substring match does not grant access
     expect(user).toBe(false);
     expect(details.message).toBe('You must have "read" role to log in.');
+  });
+
+  it('should allow login when roles claim is a space-separated string containing the required role', async () => {
+    // Arrange – IdP returns roles as a space-delimited string
+    jwtDecode.mockReturnValue({
+      roles: 'role1 role2 requiredRole',
+    });
+
+    // Act
+    const { user } = await validate(tokenset);
+
+    // Assert – login succeeds when required role is present after splitting
+    expect(user).toBeTruthy();
+    expect(createUser).toHaveBeenCalled();
+  });
+
+  it('should allow login when roles claim is a comma-separated string containing the required role', async () => {
+    // Arrange – IdP returns roles as a comma-delimited string
+    jwtDecode.mockReturnValue({
+      roles: 'role1,role2,requiredRole',
+    });
+
+    // Act
+    const { user } = await validate(tokenset);
+
+    // Assert – login succeeds when required role is present after splitting
+    expect(user).toBeTruthy();
+    expect(createUser).toHaveBeenCalled();
+  });
+
+  it('should allow login when roles claim is a mixed comma-and-space-separated string containing the required role', async () => {
+    // Arrange – IdP returns roles with comma-and-space delimiters
+    jwtDecode.mockReturnValue({
+      roles: 'role1, role2, requiredRole',
+    });
+
+    // Act
+    const { user } = await validate(tokenset);
+
+    // Assert – login succeeds when required role is present after splitting
+    expect(user).toBeTruthy();
+    expect(createUser).toHaveBeenCalled();
+  });
+
+  it('should reject login when roles claim is a space-separated string that does not contain the required role', async () => {
+    // Arrange – IdP returns a delimited string but required role is absent
+    jwtDecode.mockReturnValue({
+      roles: 'role1 role2 otherRole',
+    });
+
+    // Act
+    const { user, details } = await validate(tokenset);
+
+    // Assert – login is rejected with the correct error message
+    expect(user).toBe(false);
+    expect(details.message).toBe('You must have "requiredRole" role to log in.');
   });
 
   it('should allow login when single required role is present (backward compatibility)', async () => {
@@ -775,10 +832,11 @@ describe('setupOpenId', () => {
   });
 
   it('should attach federatedTokens to user object for token propagation', async () => {
-    // Arrange - setup tokenset with access token, refresh token, and expiration
+    // Arrange - setup tokenset with access token, id token, refresh token, and expiration
     const tokensetWithTokens = {
       ...tokenset,
       access_token: 'mock_access_token_abc123',
+      id_token: 'mock_id_token_def456',
       refresh_token: 'mock_refresh_token_xyz789',
       expires_at: 1234567890,
     };
@@ -790,9 +848,29 @@ describe('setupOpenId', () => {
     expect(user.federatedTokens).toBeDefined();
     expect(user.federatedTokens).toEqual({
       access_token: 'mock_access_token_abc123',
+      id_token: 'mock_id_token_def456',
       refresh_token: 'mock_refresh_token_xyz789',
       expires_at: 1234567890,
     });
+  });
+
+  it('should include id_token in federatedTokens distinct from access_token', async () => {
+    // Arrange - use different values for access_token and id_token
+    const tokensetWithTokens = {
+      ...tokenset,
+      access_token: 'the_access_token',
+      id_token: 'the_id_token',
+      refresh_token: 'the_refresh_token',
+      expires_at: 9999999999,
+    };
+
+    // Act
+    const { user } = await validate(tokensetWithTokens);
+
+    // Assert - id_token and access_token must be different values
+    expect(user.federatedTokens.access_token).toBe('the_access_token');
+    expect(user.federatedTokens.id_token).toBe('the_id_token');
+    expect(user.federatedTokens.id_token).not.toBe(user.federatedTokens.access_token);
   });
 
   it('should include tokenset along with federatedTokens', async () => {
@@ -800,6 +878,7 @@ describe('setupOpenId', () => {
     const tokensetWithTokens = {
       ...tokenset,
       access_token: 'test_access_token',
+      id_token: 'test_id_token',
       refresh_token: 'test_refresh_token',
       expires_at: 9999999999,
     };
@@ -811,7 +890,9 @@ describe('setupOpenId', () => {
     expect(user.tokenset).toBeDefined();
     expect(user.federatedTokens).toBeDefined();
     expect(user.tokenset.access_token).toBe('test_access_token');
+    expect(user.tokenset.id_token).toBe('test_id_token');
     expect(user.federatedTokens.access_token).toBe('test_access_token');
+    expect(user.federatedTokens.id_token).toBe('test_id_token');
   });
 
   it('should set role to "ADMIN" if OPENID_ADMIN_ROLE is set and user has that role', async () => {
@@ -1158,6 +1239,46 @@ describe('setupOpenId', () => {
       expect(user.role).toBeUndefined();
     });
 
+    it('should grant admin when admin role claim is a space-separated string containing the admin role', async () => {
+      // Arrange – IdP returns admin roles as a space-delimited string
+      process.env.OPENID_ADMIN_ROLE = 'site-admin';
+      process.env.OPENID_ADMIN_ROLE_PARAMETER_PATH = 'app_roles';
+
+      jwtDecode.mockReturnValue({
+        roles: ['requiredRole'],
+        app_roles: 'user site-admin moderator',
+      });
+
+      await setupOpenId();
+      verifyCallback = require('openid-client/passport').__getVerifyCallbackByName('openid');
+
+      // Act
+      const { user } = await validate(tokenset);
+
+      // Assert – admin role is granted after splitting the delimited string
+      expect(user.role).toBe('ADMIN');
+    });
+
+    it('should not grant admin when admin role claim is a space-separated string that does not contain the admin role', async () => {
+      // Arrange – delimited string present but admin role is absent
+      process.env.OPENID_ADMIN_ROLE = 'site-admin';
+      process.env.OPENID_ADMIN_ROLE_PARAMETER_PATH = 'app_roles';
+
+      jwtDecode.mockReturnValue({
+        roles: ['requiredRole'],
+        app_roles: 'user moderator',
+      });
+
+      await setupOpenId();
+      verifyCallback = require('openid-client/passport').__getVerifyCallbackByName('openid');
+
+      // Act
+      const { user } = await validate(tokenset);
+
+      // Assert – admin role is not granted
+      expect(user.role).toBeUndefined();
+    });
+
     it('should handle nested path with special characters in keys', async () => {
       process.env.OPENID_REQUIRED_ROLE = 'app-user';
       process.env.OPENID_REQUIRED_ROLE_PARAMETER_PATH = 'resource_access.my-app-123.roles';
@@ -1280,6 +1401,84 @@ describe('setupOpenId', () => {
         expect.stringContaining("Key 'roleCount' not found in id token!"),
       );
       expect(user).toBe(false);
+    });
+  });
+
+  describe('OPENID_EMAIL_CLAIM', () => {
+    it('should use the default email when OPENID_EMAIL_CLAIM is not set', async () => {
+      const { user } = await validate(tokenset);
+      expect(user.email).toBe('test@example.com');
+    });
+
+    it('should use the configured claim when OPENID_EMAIL_CLAIM is set', async () => {
+      process.env.OPENID_EMAIL_CLAIM = 'upn';
+      const userinfo = { ...tokenset.claims(), upn: 'user@corp.example.com' };
+
+      const { user } = await validate({ ...tokenset, claims: () => userinfo });
+
+      expect(user.email).toBe('user@corp.example.com');
+      expect(createUser).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'user@corp.example.com' }),
+        expect.anything(),
+        true,
+        true,
+      );
+    });
+
+    it('should fall back to preferred_username when email is missing and OPENID_EMAIL_CLAIM is not set', async () => {
+      const userinfo = { ...tokenset.claims() };
+      delete userinfo.email;
+
+      const { user } = await validate({ ...tokenset, claims: () => userinfo });
+
+      expect(user.email).toBe('testusername');
+    });
+
+    it('should fall back to upn when email and preferred_username are missing and OPENID_EMAIL_CLAIM is not set', async () => {
+      const userinfo = { ...tokenset.claims(), upn: 'user@corp.example.com' };
+      delete userinfo.email;
+      delete userinfo.preferred_username;
+
+      const { user } = await validate({ ...tokenset, claims: () => userinfo });
+
+      expect(user.email).toBe('user@corp.example.com');
+    });
+
+    it('should ignore empty string OPENID_EMAIL_CLAIM and use default fallback', async () => {
+      process.env.OPENID_EMAIL_CLAIM = '';
+
+      const { user } = await validate(tokenset);
+
+      expect(user.email).toBe('test@example.com');
+    });
+
+    it('should trim whitespace from OPENID_EMAIL_CLAIM and resolve correctly', async () => {
+      process.env.OPENID_EMAIL_CLAIM = '  upn  ';
+      const userinfo = { ...tokenset.claims(), upn: 'user@corp.example.com' };
+
+      const { user } = await validate({ ...tokenset, claims: () => userinfo });
+
+      expect(user.email).toBe('user@corp.example.com');
+    });
+
+    it('should ignore whitespace-only OPENID_EMAIL_CLAIM and use default fallback', async () => {
+      process.env.OPENID_EMAIL_CLAIM = '   ';
+
+      const { user } = await validate(tokenset);
+
+      expect(user.email).toBe('test@example.com');
+    });
+
+    it('should fall back to default chain with warning when configured claim is missing from userinfo', async () => {
+      const { logger } = require('@librechat/data-schemas');
+      process.env.OPENID_EMAIL_CLAIM = 'nonexistent_claim';
+
+      const { user } = await validate(tokenset);
+
+      expect(user.email).toBe('test@example.com');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('OPENID_EMAIL_CLAIM="nonexistent_claim" not present in userinfo'),
+      );
     });
   });
 });

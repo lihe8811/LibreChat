@@ -124,9 +124,14 @@ module.exports = {
         updateOperation,
         {
           new: true,
-          upsert: true,
+          upsert: metadata?.noUpsert !== true,
         },
       );
+
+      if (!conversation) {
+        logger.debug('[saveConvo] Conversation not found, skipping update');
+        return null;
+      }
 
       return conversation.toObject();
     } catch (error) {
@@ -223,7 +228,7 @@ module.exports = {
             },
           ],
         };
-      } catch (err) {
+      } catch (_err) {
         logger.warn('[getConvosByCursor] Invalid cursor format, starting from beginning');
       }
       if (cursorFilter) {
@@ -356,6 +361,7 @@ module.exports = {
 
       const deleteMessagesResult = await deleteMessages({
         conversationId: { $in: conversationIds },
+        user,
       });
 
       return { ...deleteConvoResult, messages: deleteMessagesResult };
