@@ -1,6 +1,6 @@
 const express = require('express');
 const { isEnabled, getBalanceConfig } = require('@librechat/api');
-const { defaultSocialLogins } = require('librechat-data-provider');
+const { defaultSocialLogins, removeNullishValues } = require('librechat-data-provider');
 const { logger, getTenantId, SystemCapabilities } = require('@librechat/data-schemas');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const { getLdapConfig } = require('~/server/services/Config/ldap');
@@ -25,7 +25,60 @@ function isBirthday() {
   return today.getMonth() === 1 && today.getDate() === 11;
 }
 
-function buildSharedPayload() {
+function resolveBrandingValue(value, logoVariant, fallback) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+
+  if (value && typeof value === 'object') {
+    const rawVariantValue = value[logoVariant];
+    const rawDefaultValue = value.default;
+    const variantValue =
+      typeof rawVariantValue === 'string' && rawVariantValue.trim().length > 0
+        ? rawVariantValue.trim()
+        : '';
+    const defaultValue =
+      typeof rawDefaultValue === 'string' && rawDefaultValue.trim().length > 0
+        ? rawDefaultValue.trim()
+        : '';
+    return variantValue || defaultValue || fallback;
+  }
+
+  return fallback;
+}
+
+function buildBrandingPayload(appConfig) {
+  const configBranding = appConfig?.branding;
+  const configLogoVariant = configBranding?.logoVariant?.trim();
+  const logoVariant =
+    configLogoVariant && configLogoVariant.length > 0 ? configLogoVariant : 'default';
+  const assetPrefix = logoVariant === 'default' ? 'assets' : `assets/${logoVariant}`;
+  const appTitle = resolveBrandingValue(
+    configBranding?.appTitle,
+    logoVariant,
+    process.env.APP_TITLE || 'LibreChat',
+  );
+  const helpAndFaqURL = resolveBrandingValue(
+    configBranding?.helpAndFaqURL,
+    logoVariant,
+    process.env.HELP_AND_FAQ_URL || 'https://librechat.ai',
+  );
+
+  return {
+    appTitle,
+    helpAndFaqURL,
+    branding: removeNullishValues({
+      ...(configBranding ?? {}),
+      logoVariant,
+      assetPrefix,
+      appTitle,
+      helpAndFaqURL,
+    }),
+  };
+}
+
+function buildSharedPayload(appConfig) {
   const isOpenIdEnabled =
     !!process.env.OPENID_CLIENT_ID &&
     !!process.env.OPENID_CLIENT_SECRET &&
@@ -39,10 +92,11 @@ function buildSharedPayload() {
     !!process.env.SAML_SESSION_SECRET;
 
   const ldap = getLdapConfig();
+  const brandingPayload = buildBrandingPayload(appConfig);
 
   /** @type {Partial<TStartupConfig>} */
   const payload = {
-    appTitle: process.env.APP_TITLE || 'LibreChat',
+    ...brandingPayload,
     discordLoginEnabled: !!process.env.DISCORD_CLIENT_ID && !!process.env.DISCORD_CLIENT_SECRET,
     facebookLoginEnabled: !!process.env.FACEBOOK_CLIENT_ID && !!process.env.FACEBOOK_CLIENT_SECRET,
     githubLoginEnabled: !!process.env.GITHUB_CLIENT_ID && !!process.env.GITHUB_CLIENT_SECRET,
@@ -73,12 +127,10 @@ function buildSharedPayload() {
       isBirthday() ||
       isEnabled(process.env.SHOW_BIRTHDAY_ICON) ||
       process.env.SHOW_BIRTHDAY_ICON === '',
-    helpAndFaqURL: process.env.HELP_AND_FAQ_URL || 'https://librechat.ai',
     sharedLinksEnabled,
     publicSharedLinksEnabled,
     analyticsGtmId: process.env.ANALYTICS_GTM_ID,
     openidReuseTokens,
-    /** Read inline (not module-level) for per-request evaluation and test isolation */
     allowAccountDeletion:
       process.env.ALLOW_ACCOUNT_DELETION === undefined ||
       isEnabled(process.env.ALLOW_ACCOUNT_DELETION),
@@ -118,15 +170,13 @@ function buildWebSearchConfig(appConfig) {
 
 router.get('/', async function (req, res) {
   try {
-    const sharedPayload = buildSharedPayload();
-
     if (!req.user) {
       const tenantId = getTenantId();
       const baseConfig = await getAppConfig(tenantId ? { tenantId } : { baseOnly: true });
 
       /** @type {Partial<TStartupConfig>} */
       const payload = {
-        ...sharedPayload,
+        ...buildSharedPayload(baseConfig),
         socialLogins: baseConfig?.registration?.socialLogins ?? defaultSocialLogins,
         turnstile: baseConfig?.turnstileConfig,
       };
@@ -155,7 +205,7 @@ router.get('/', async function (req, res) {
 
     /** @type {TStartupConfig} */
     const payload = {
-      ...sharedPayload,
+      ...buildSharedPayload(appConfig),
       socialLogins: appConfig?.registration?.socialLogins ?? defaultSocialLogins,
       interface: appConfig?.interfaceConfig,
       turnstile: appConfig?.turnstileConfig,

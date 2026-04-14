@@ -101,6 +101,7 @@ const setup = ({
 };
 
 beforeEach(() => {
+  mockLogin.mockReset();
   setup();
 });
 
@@ -141,4 +142,30 @@ test('displays validation error messages', async () => {
 
   expect(getByText(/You must enter a valid email address/i)).toBeInTheDocument();
   expect(getByText(/Password must be at least 8 characters/i)).toBeInTheDocument();
+});
+
+test('uses username when email login is disabled', async () => {
+  const usernameConfig = {
+    ...mockStartupConfig,
+    emailLoginEnabled: false,
+  };
+
+  setup({
+    useGetStartupConfigReturnValue: {
+      isLoading: false,
+      isError: false,
+      data: usernameConfig,
+    },
+  });
+
+  const { getByLabelText } = render(<Login onSubmit={mockLogin} startupConfig={usernameConfig} />);
+  const usernameInput = getByLabelText(/username/i);
+  const passwordInput = getByLabelText(/password/i);
+  const submitButton = getByTestId(document.body, 'login-button');
+
+  await userEvent.type(usernameInput, 'TestUser');
+  await userEvent.type(passwordInput, 'password');
+  await userEvent.click(submitButton);
+
+  expect(mockLogin).toHaveBeenCalledWith({ username: 'testuser', password: 'password' });
 });
