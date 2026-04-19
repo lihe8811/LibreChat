@@ -27,7 +27,7 @@ jobs:
 
       - name: Sync upstream changes
         id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.2
         with:
           upstream_sync_repo: danny-avila/LibreChat
           upstream_sync_branch: main
