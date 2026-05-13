@@ -1,5 +1,5 @@
 const express = require('express');
-const { isEnabled, getBalanceConfig } = require('@librechat/api');
+const { isEnabled, getBalanceConfig, getCloudFrontConfig } = require('@librechat/api');
 const { defaultSocialLogins, removeNullishValues } = require('librechat-data-provider');
 const { logger, getTenantId, SystemCapabilities } = require('@librechat/data-schemas');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
@@ -168,8 +168,29 @@ function buildWebSearchConfig(appConfig) {
   };
 }
 
+function buildCloudFrontStartupConfig() {
+  const config = getCloudFrontConfig();
+  if (
+    config?.imageSigning !== 'cookies' ||
+    !config.domain ||
+    !config.cookieDomain ||
+    !config.privateKey ||
+    !config.keyPairId
+  ) {
+    return undefined;
+  }
+
+  return {
+    cookieRefresh: {
+      endpoint: '/api/auth/cloudfront/refresh',
+      domain: config.domain,
+    },
+  };
+}
+
 router.get('/', async function (req, res) {
   try {
+    const cloudFront = buildCloudFrontStartupConfig();
     if (!req.user) {
       const tenantId = getTenantId();
       const baseConfig = await getAppConfig(tenantId ? { tenantId } : { baseOnly: true });
@@ -179,6 +200,7 @@ router.get('/', async function (req, res) {
         ...buildSharedPayload(baseConfig),
         socialLogins: baseConfig?.registration?.socialLogins ?? defaultSocialLogins,
         turnstile: baseConfig?.turnstileConfig,
+        ...(cloudFront ? { cloudFront } : {}),
       };
 
       const interfaceConfig = baseConfig?.interfaceConfig;
@@ -220,6 +242,7 @@ router.get('/', async function (req, res) {
       conversationImportMaxFileSize: process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES
         ? parseInt(process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES, 10)
         : 0,
+      ...(cloudFront ? { cloudFront } : {}),
     };
 
     const webSearch = buildWebSearchConfig(appConfig);
