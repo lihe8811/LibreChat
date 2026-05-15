@@ -7,11 +7,8 @@
 
 import { logger } from '@librechat/data-schemas';
 import { Constants } from 'librechat-data-provider';
-import {
-  createToolSearch,
-  createProgrammaticToolCallingTool,
-} from '@librechat/agents';
 import * as Agents from '@librechat/agents';
+import { createToolSearch } from '@librechat/agents';
 import type { AgentToolOptions } from 'librechat-data-provider';
 import type {
   LCToolRegistry,
@@ -31,6 +28,22 @@ const ProgrammaticToolCallingDefinition = (
 ).ProgrammaticToolCallingDefinition as
   | { name: string; description?: string; schema?: unknown }
   | undefined;
+const BashProgrammaticToolCallingDefinition = (
+  Agents as Record<string, unknown>
+).BashProgrammaticToolCallingDefinition as
+  | { name: string; description?: string; schema?: unknown }
+  | undefined;
+const createProgrammaticToolCalling = (
+  Agents as Record<string, unknown>
+).createProgrammaticToolCallingTool as (() => GenericTool) | undefined;
+type BashProgrammaticToolFactoryParams = {
+  authHeaders?: BuildToolClassificationParams['authHeaders'];
+};
+const createBashProgrammaticToolCalling = (
+  Agents as Record<string, unknown>
+).createBashProgrammaticToolCallingTool as
+  | ((params: BashProgrammaticToolFactoryParams) => GenericTool)
+  | undefined;
 
 const toolSearchDefinition = ToolSearchToolDefinition ?? {
   name: 'tool_search',
@@ -47,20 +60,41 @@ const toolSearchDefinition = ToolSearchToolDefinition ?? {
   },
 };
 
-const programmaticToolCallingDefinition = ProgrammaticToolCallingDefinition ?? {
-  name: 'run_tools_with_code',
-  description: 'Run tools programmatically via code execution.',
-  schema: {
-    type: 'object',
-    properties: {
-      code: {
-        type: 'string',
-        description: 'Code that invokes tools programmatically.',
+const programmaticToolCallingDefinition =
+  BashProgrammaticToolCallingDefinition ??
+  ProgrammaticToolCallingDefinition ?? {
+    name: 'run_tools_with_code',
+    description: 'Run tools programmatically via code execution.',
+    schema: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description: 'Code that invokes tools programmatically.',
+        },
       },
+      required: ['code'],
     },
-    required: ['code'],
-  },
-};
+  };
+
+function addProgrammaticToolDefinition(
+  toolDefinitions: LCTool[],
+  toolRegistry: LCToolRegistry,
+): void {
+  if (!programmaticToolCallingDefinition.name) {
+    return;
+  }
+
+  toolDefinitions.push({
+    name: programmaticToolCallingDefinition.name,
+    description: programmaticToolCallingDefinition.description,
+    parameters: programmaticToolCallingDefinition.schema as unknown as LCTool['parameters'],
+  });
+  toolRegistry.set(programmaticToolCallingDefinition.name, {
+    name: programmaticToolCallingDefinition.name,
+    allowed_callers: ['direct'],
+  });
+}
 
 export interface ToolDefinition {
   name: string;
@@ -223,8 +257,14 @@ export interface BuildToolClassificationParams {
   agentToolOptions?: AgentToolOptions;
   /** Whether the deferred_tools capability is enabled (from agent config) */
   deferredToolsEnabled?: boolean;
+  /** Whether the programmatic_tools capability is enabled (from agent config) */
+  programmaticToolsEnabled?: boolean;
+  /** Whether code execution is enabled and requested by this agent */
+  codeExecutionEnabled?: boolean;
   /** When true, skip creating tool instances (for event-driven mode) */
   definitionsOnly?: boolean;
+  /** Optional host-supplied Code API auth headers for remote programmatic execution. */
+  authHeaders?: () => Promise<Record<string, string>> | Record<string, string>;
 }
 
 /** Result from building tool classification */
@@ -274,7 +314,7 @@ export function agentHasDeferredTools(toolRegistry: LCToolRegistry): boolean {
  * 1. Filters loaded tools for MCP tools
  * 2. Extracts tool definitions and builds the registry from agent's tool_options
  * 3. Cleans up temporary mcpJsonSchema properties
- * 4. Creates PTC tool only if agent has tools configured for programmatic calling
+ * 4. Creates PTC tool only if capabilities allow the agent's programmatic tools
  * 5. Creates tool search tool only if agent has deferred tools
  *
  * @param params - Parameters including loaded tools, userId, agentId, agentToolOptions, and dependencies
@@ -289,6 +329,9 @@ export async function buildToolClassification(
     agentToolOptions,
     definitionsOnly = false,
     deferredToolsEnabled = true,
+    programmaticToolsEnabled = false,
+    codeExecutionEnabled = false,
+    authHeaders,
   } = params;
   const additionalTools: GenericTool[] = [];
 
@@ -310,10 +353,11 @@ export async function buildToolClassification(
 
   /**
    * Check if this agent actually has tools configured for these features.
-   * Only enable PTC if the agent has programmatic tools.
+   * Only enable PTC if code/programmatic capabilities allow the agent's programmatic tools.
    * Only enable tool search if the agent has deferred tools AND the capability is enabled.
    */
-  const hasProgrammaticTools = agentHasProgrammaticTools(toolRegistry);
+  const hasProgrammaticTools =
+    programmaticToolsEnabled && codeExecutionEnabled && agentHasProgrammaticTools(toolRegistry);
   const hasDeferredTools = deferredToolsEnabled && agentHasDeferredTools(toolRegistry);
 
   /** Clear defer_loading if capability disabled */
@@ -369,17 +413,7 @@ export async function buildToolClassification(
 
   /** In definitions-only mode, add PTC definition without creating the tool instance */
   if (definitionsOnly) {
-    if (programmaticToolCallingDefinition.name) {
-      toolDefinitions.push({
-        name: programmaticToolCallingDefinition.name,
-        description: programmaticToolCallingDefinition.description,
-        parameters: programmaticToolCallingDefinition.schema as unknown as LCTool['parameters'],
-      });
-      toolRegistry.set(programmaticToolCallingDefinition.name, {
-        name: programmaticToolCallingDefinition.name,
-        allowed_callers: ['direct'],
-      });
-    }
+    addProgrammaticToolDefinition(toolDefinitions, toolRegistry);
     logger.debug(
       `[buildToolClassification] PTC definition added for agent ${agentId} (definitions only)`,
     );
@@ -387,21 +421,16 @@ export async function buildToolClassification(
   }
 
   try {
-    const ptcTool = createProgrammaticToolCallingTool({});
+    const ptcTool = createBashProgrammaticToolCalling
+      ? createBashProgrammaticToolCalling({ authHeaders })
+      : createProgrammaticToolCalling?.();
+
+    if (!ptcTool) {
+      throw new Error('No compatible programmatic tool calling factory available');
+    }
     additionalTools.push(ptcTool);
 
-    /** Add PTC definition for event-driven mode if available in installed agents package */
-    if (programmaticToolCallingDefinition.name) {
-      toolDefinitions.push({
-        name: programmaticToolCallingDefinition.name,
-        description: programmaticToolCallingDefinition.description,
-        parameters: programmaticToolCallingDefinition.schema as unknown as LCTool['parameters'],
-      });
-      toolRegistry.set(programmaticToolCallingDefinition.name, {
-        name: programmaticToolCallingDefinition.name,
-        allowed_callers: ['direct'],
-      });
-    }
+    addProgrammaticToolDefinition(toolDefinitions, toolRegistry);
 
     logger.debug(`[buildToolClassification] PTC tool enabled for agent ${agentId}`);
   } catch (error) {
