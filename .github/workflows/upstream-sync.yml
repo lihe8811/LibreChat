@@ -19,12 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Clean issue notice
-        uses: actions-cool/issues-helper@v3
-        with:
-          actions: 'close-issues'
-          labels: '🚨 Sync Fail'
-
       - name: Sync upstream changes
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.2
@@ -34,11 +28,3 @@ jobs:
           target_sync_branch: main
           target_repo_token: ${{ secrets.PAT }} # automatically generated, no need to set
           test_mode: false
-
-      - name: Sync check
-        if: failure()
-        uses: actions-cool/issues-helper@v3
-        with:
-          actions: 'create-issue'
-          title: '🚨 同步失败 | Sync Fail'
-          labels: '🚨 Sync Fail'
