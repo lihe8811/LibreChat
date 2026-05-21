@@ -45,6 +45,7 @@ export const excludedKeys = new Set([
   'createdAt',
   'updatedAt',
   'expiredAt',
+  'isTemporary',
   'messages',
   'isArchived',
   'tags',
@@ -895,6 +896,11 @@ const mcpServersSchema = z
 
 export type TMcpServersConfig = z.infer<typeof mcpServersSchema>;
 
+export enum RetentionMode {
+  ALL = 'all',
+  TEMPORARY = 'temporary',
+}
+
 export const interfaceSchema = z
   .object({
     privacyPolicy: z
@@ -937,6 +943,7 @@ export const interfaceSchema = z
     temporaryChat: z.boolean().optional(),
     temporaryChatRetention: z.number().min(1).max(8760).optional(),
     autoSubmitFromUrl: z.boolean().optional(),
+    retentionMode: z.nativeEnum(RetentionMode).default(RetentionMode.TEMPORARY),
     runCode: z.boolean().optional(),
     webSearch: z.boolean().optional(),
     peoplePicker: z
@@ -2149,9 +2156,9 @@ export enum TTSProviders {
 /** Enum for app-wide constants */
 export enum Constants {
   /** Key for the app's version. */
-  VERSION = 'v0.8.5',
+  VERSION = 'v0.8.6-rc1',
   /** Key for the Custom Config's version (librechat.yaml). */
-  CONFIG_VERSION = '1.3.10',
+  CONFIG_VERSION = '1.3.11',
   /** Standard value for the first message's `parentMessageId` value, to indicate no parent exists. */
   NO_PARENT = '00000000-0000-0000-0000-000000000000',
   /** Standard value to use whatever the submission prelim. `responseMessageId` is */

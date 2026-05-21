@@ -25,6 +25,7 @@ beforeAll(async () => {
     mongoose.models.SystemGrant || mongoose.model<t.ISystemGrant>('SystemGrant', systemGrantSchema);
   methods = createSystemGrantMethods(mongoose);
   await mongoose.connect(mongoServer.getUri());
+  await SystemGrant.syncIndexes();
 });
 
 afterAll(async () => {

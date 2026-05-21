@@ -293,6 +293,52 @@ describe('GET /api/config', () => {
       expect(response.body.webSearch).toEqual({ searchProvider: 'tavily' });
     });
 
+    it('should strip private prompt fields from model spec presets', async () => {
+      mockGetAppConfig.mockResolvedValue({
+        ...baseAppConfig,
+        modelSpecs: {
+          enforce: false,
+          prioritize: true,
+          list: [
+            {
+              name: 'guarded-spec',
+              label: 'Guarded Spec',
+              preset: {
+                endpoint: 'openAI',
+                model: 'gpt-4o',
+                promptPrefix: 'private prompt prefix',
+                instructions: 'private assistant instructions',
+                additional_instructions: 'private additional instructions',
+                system: 'private bedrock system',
+                context: 'private context',
+                examples: [{ input: { content: 'a' }, output: { content: 'b' } }],
+                greeting: 'Hello',
+              },
+            },
+          ],
+        },
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.modelSpecs.list[0].preset).toEqual({
+        endpoint: 'openAI',
+        model: 'gpt-4o',
+        greeting: 'Hello',
+      });
+    });
+
+    it('should include full interface config', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.interface).toEqual(baseAppConfig.interfaceConfig);
+    });
+
     it('includes branding and authenticated-only env var fields', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
       process.env.SANDPACK_BUNDLER_URL = 'https://bundler.test';
