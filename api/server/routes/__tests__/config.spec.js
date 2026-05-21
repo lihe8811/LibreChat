@@ -18,6 +18,12 @@ jest.mock('@librechat/data-schemas', () => ({
   getTenantId: (...args) => mockGetTenantId(...args),
 }));
 
+const mockGetCloudFrontConfig = jest.fn(() => null);
+jest.mock('@librechat/api', () => ({
+  ...jest.requireActual('@librechat/api'),
+  getCloudFrontConfig: (...args) => mockGetCloudFrontConfig(...args),
+}));
+
 const request = require('supertest');
 const express = require('express');
 const configRoute = require('../config');
@@ -176,6 +182,53 @@ describe('GET /api/config', () => {
           logoVariant: 'qingfan',
         }),
       );
+    });
+
+    it('should advertise CloudFront cookie refresh only when signed-cookie mode is active', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockGetCloudFrontConfig.mockReturnValue({
+        domain: 'https://cdn.example.com',
+        imageSigning: 'cookies',
+        cookieDomain: '.example.com',
+        privateKey: 'test-private-key',
+        keyPairId: 'K123ABC',
+      });
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.cloudFront).toEqual({
+        cookieRefresh: {
+          endpoint: '/api/auth/cloudfront/refresh',
+          domain: 'https://cdn.example.com',
+        },
+      });
+    });
+
+    it('should omit CloudFront cookie refresh when signed-cookie mode is inactive', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockGetCloudFrontConfig.mockReturnValue({
+        domain: 'https://cdn.example.com',
+        imageSigning: 'url',
+      });
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).not.toHaveProperty('cloudFront');
+    });
+
+    it('should omit CloudFront cookie refresh when cookie mode cannot mint cookies', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockGetCloudFrontConfig.mockReturnValue({
+        domain: 'https://cdn.example.com',
+        imageSigning: 'cookies',
+      });
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).not.toHaveProperty('cloudFront');
     });
 
     it('defaults allowAccountDeletion to true when env var is unset', async () => {
