@@ -136,14 +136,13 @@ class FluxAPI extends Tool {
     // 1. ALWAYS enhance basic prompts into 5-10 detailed sentences (e.g., "a cat" becomes: "A close-up photo of a sleek Siamese cat with piercing blue eyes. The cat sits elegantly on a vintage leather armchair, its tail curled gracefully around its paws. Warm afternoon sunlight streams through a nearby window, casting gentle shadows across its face and highlighting the subtle variations in its cream and chocolate-point fur. The background is softly blurred, creating a shallow depth of field that draws attention to the cat's expressive features. The overall composition has a peaceful, contemplative mood with a professional photography style.")
     // 2. Each prompt MUST be 3-6 descriptive sentences minimum, focusing on visual elements: lighting, composition, mood, and style
     // 3. Don't set aspect_ratio if the user doesn't provide it explicitly
-    
-    // For EDITING (action="edit"): 
+    //
+    // For EDITING (action="edit"):
     // 1. ALWAYS set action="edit" when modifying existing images
     // 2. ALWAYS include exactly ONE image_id in the image_ids array parameter
     // 3. Describe the desired changes or enhancements to the image in detail
     // 4. Focus on what should be added, modified, or enhanced rather than what to remove
     // 5. Don't set aspect_ratio if the user doesn't provide it explicitly`;
-    
 
     // Add base URL from environment variable with fallback
     this.baseUrl = process.env.FLUX_API_BASE_URL || 'https://api.us1.bfl.ai';
@@ -207,50 +206,57 @@ class FluxAPI extends Tool {
 
     // Determine if this is an edit or generate request
     const isEdit = this.image_ids && this.image_ids.length > 0;
-    
+
     // For editing, we need to get the image file
     let imageBase64 = null;
     let imageFile = null;
-    
+
     if (isEdit) {
       if (this.image_ids.length > 1) {
-        return this.returnValue('Flux Kontext Pro only supports editing one image at a time. Please provide only one image ID.');
+        return this.returnValue(
+          'Flux Kontext Pro only supports editing one image at a time. Please provide only one image ID.',
+        );
       }
-      
+
       try {
         const imageId = this.image_ids[0];
         logger.debug('[FluxAPI] Getting image file for editing:', imageId);
-        
+
         // Get the file from the database
         const files = await getFiles({ file_id: imageId });
-        
+
         if (!files || files.length === 0) {
           return this.returnValue(`Image with ID ${imageId} not found.`);
         }
         imageFile = files[0];
-        
+
         // For local files, fetch from the server URL
         const serverDomain = process.env.DOMAIN_SERVER || 'http://localhost:3080';
         const imageUrl = `${serverDomain}${imageFile.filepath}`;
         logger.debug('[FluxAPI] Fetching image from URL:', imageUrl);
-        
+
         // Fetch the image from the URL
         const fetchOptions = {};
         if (process.env.PROXY) {
           const { HttpsProxyAgent } = require('https-proxy-agent');
           fetchOptions.agent = new HttpsProxyAgent(process.env.PROXY);
         }
-        
+
         const imageResponse = await fetch(imageUrl, fetchOptions);
-        
+
         if (!imageResponse.ok) {
-          return this.returnValue(`Failed to fetch image from ${imageUrl}: ${imageResponse.status} ${imageResponse.statusText}`);
+          return this.returnValue(
+            `Failed to fetch image from ${imageUrl}: ${imageResponse.status} ${imageResponse.statusText}`,
+          );
         }
-        
+
         const arrayBuffer = await imageResponse.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         imageBase64 = buffer.toString('base64');
-        logger.debug('[FluxAPI] Image loaded for editing from URL, base64 length:', imageBase64.length);
+        logger.debug(
+          '[FluxAPI] Image loaded for editing from URL, base64 length:',
+          imageBase64.length,
+        );
       } catch (error) {
         logger.error('[FluxAPI] Error getting image for editing:', error);
         return this.returnValue(`Error getting image for editing: ${error.message}`);
@@ -259,7 +265,7 @@ class FluxAPI extends Tool {
 
     // Prepare the request data
     const requestApiKey = this.apiKey;
-    
+
     // Set the endpoint based on action
     const generateEndpoint = '/v1/flux-kontext-pro';
     const resultEndpoint = '/v1/get_result';
