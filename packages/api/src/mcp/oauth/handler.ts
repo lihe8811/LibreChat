@@ -350,6 +350,27 @@ export class MCPOAuthHandler {
     return metadata;
   }
 
+  private static hasUnpinnedClientSecret(config?: MCPOptions['oauth']): boolean {
+    return !!(
+      config?.client_id &&
+      config.client_secret &&
+      (!config.authorization_url || !config.token_url)
+    );
+  }
+
+  private static assertNoUnpinnedClientSecret(config?: MCPOptions['oauth']): void {
+    if (config?.client_secret && !config.client_id) {
+      throw new Error('[MCPOAuth] OAuth client_secret requires oauth.client_id.');
+    }
+
+    if (!this.hasUnpinnedClientSecret(config)) {
+      return;
+    }
+    throw new Error(
+      '[MCPOAuth] OAuth client_secret requires both oauth.authorization_url and oauth.token_url; refusing to use it with auto-discovered OAuth endpoints.',
+    );
+  }
+
   /**
    * Registers an OAuth client dynamically
    */
@@ -469,6 +490,8 @@ export class MCPOAuthHandler {
     logger.debug(`[MCPOAuth] Generated flowId: ${flowId}, state: ${state}`);
 
     try {
+      this.assertNoUnpinnedClientSecret(config);
+
       if (config?.authorization_url && config?.token_url && config?.client_id) {
         logger.debug(`[MCPOAuth] Using pre-configured OAuth settings for ${serverName}`);
 
@@ -597,7 +620,16 @@ export class MCPOAuthHandler {
       let clientInfo: OAuthClientInformation | undefined;
       let reusedStoredClient = false;
 
-      if (findToken) {
+      if (config?.client_id) {
+        logger.debug(`[MCPOAuth] Using predefined public client_id for ${serverName}`);
+        clientInfo = {
+          client_id: config.client_id,
+          redirect_uris: [redirectUri],
+          scope: config.scope,
+          token_endpoint_auth_method: 'none',
+        };
+        logger.debug(`[MCPOAuth] Using predefined client with ID: ${clientInfo.client_id}`);
+      } else if (findToken) {
         try {
           const existing = await MCPTokenStorage.getClientInfoAndMetadata({
             userId,
@@ -638,6 +670,7 @@ export class MCPOAuthHandler {
       }
 
       if (!clientInfo) {
+        logger.debug(`[MCPOAuth] Registering OAuth client with redirect URI: ${redirectUri}`);
         clientInfo = await this.registerOAuthClient(
           authServerUrl.toString(),
           metadata,
@@ -1085,6 +1118,16 @@ export class MCPOAuthHandler {
         } else if (!metadata.serverUrl) {
           throw new Error('No token URL available for refresh');
         } else {
+          if (
+            this.hasUnpinnedClientSecret(config) &&
+            metadata.clientInfo.client_id === config?.client_id &&
+            metadata.clientInfo.client_secret === config.client_secret
+          ) {
+            throw new Error(
+              '[MCPOAuth] Stored OAuth client_secret from unpinned configuration cannot be used with auto-discovered token endpoints. Configure oauth.token_url or re-authenticate without oauth.client_secret.',
+            );
+          }
+
           /** Auto-discover OAuth configuration for refresh */
           const serverUrl = new URL(metadata.serverUrl);
           const fetchFn = this.createOAuthFetch(
