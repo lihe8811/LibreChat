@@ -1060,9 +1060,7 @@ export type TTurnstileConfig = z.infer<typeof turnstileSchema>;
 
 export const brandingConfigSchema = z.object({
   logoVariant: z.string().trim().optional(),
-  helpAndFaqURL: z
-    .union([z.string().trim(), z.record(z.string(), z.string().trim())])
-    .optional(),
+  helpAndFaqURL: z.union([z.string().trim(), z.record(z.string(), z.string().trim())]).optional(),
   appTitle: z.union([z.string().trim(), z.record(z.string(), z.string().trim())]).optional(),
 });
 
