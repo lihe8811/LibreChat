@@ -1,3 +1,5 @@
+jest.mock('~/cache/getLogStores');
+
 const mockGetAppConfig = jest.fn();
 jest.mock('~/server/services/Config/app', () => ({
   getAppConfig: (...args) => mockGetAppConfig(...args),
@@ -94,6 +96,8 @@ afterEach(() => {
   delete process.env.APP_TITLE;
   delete process.env.CHECK_BALANCE;
   delete process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES;
+  delete process.env.DISCORD_CLIENT_ID;
+  delete process.env.DISCORD_CLIENT_SECRET;
   delete process.env.DOMAIN_SERVER;
   delete process.env.GITHUB_CLIENT_ID;
   delete process.env.GITHUB_CLIENT_SECRET;
@@ -253,6 +257,49 @@ describe('GET /api/config', () => {
       expect(response.body.allowAccountDeletion).toBe(true);
     });
 
+    it('omits buildInfo in unauthenticated response when interface.buildInfo is false', async () => {
+      mockGetAppConfig.mockResolvedValue({
+        ...baseAppConfig,
+        interfaceConfig: { ...baseAppConfig.interfaceConfig, buildInfo: false },
+      });
+      mockResolveBuildInfo.mockReturnValue({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).not.toHaveProperty('buildInfo');
+      expect(response.body.interface).toEqual({
+        privacyPolicy: { externalUrl: 'https://example.com/privacy' },
+        termsOfService: { externalUrl: 'https://example.com/tos' },
+        buildInfo: false,
+      });
+    });
+
+    it('includes buildInfo in unauthenticated response when enabled', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockResolveBuildInfo.mockReturnValue({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.buildInfo).toEqual({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+    });
+
     it('returns 500 when getAppConfig throws', async () => {
       mockGetAppConfig.mockRejectedValue(new Error('Config service failure'));
       const app = createApp(null);
@@ -405,6 +452,24 @@ describe('GET /api/config', () => {
 
       expect(response.body.allowAccountDeletion).toBe(true);
       expect(mockHasCapability).not.toHaveBeenCalled();
+    });
+
+    it('omits buildInfo in authenticated response when interface.buildInfo is false', async () => {
+      mockGetAppConfig.mockResolvedValue({
+        ...baseAppConfig,
+        interfaceConfig: { ...baseAppConfig.interfaceConfig, buildInfo: false },
+      });
+      mockResolveBuildInfo.mockReturnValue({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).not.toHaveProperty('buildInfo');
     });
   });
 

@@ -65,6 +65,7 @@ jobs:
       # 3. Create a Pull Request using a dedicated fine-grained PAT so this
       # workflow does not depend on the global GITHUB_TOKEN PR-creation setting.
       - name: Create Pull Request
+        id: create-pull-request
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.PAT }}
@@ -82,3 +83,19 @@ jobs:
             - 🔍 **Details**: This PR is automatically generated upon receiving a versionPublished event with version "latest". It reflects the newest translations provided by locize.
             - ✅ **Status**: Ready for review.
           labels: "🌍 i18n"
+
+      - name: Request Reviewer
+        if: ${{ steps.create-pull-request.outputs.pull-request-number != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+          PR_NUMBER: ${{ steps.create-pull-request.outputs.pull-request-number }}
+          REVIEWER: lihe8811
+        run: |
+          author="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json author --jq '.author.login')"
+
+          if [ "$author" = "$REVIEWER" ]; then
+            echo "Skipping reviewer request because $REVIEWER authored PR #$PR_NUMBER."
+            exit 0
+          fi
+
+          gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --add-reviewer "$REVIEWER"

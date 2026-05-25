@@ -223,10 +223,11 @@ router.get('/', async function (req, res) {
     if (!req.user) {
       const tenantId = getTenantId();
       const baseConfig = await getAppConfig(tenantId ? { tenantId } : { baseOnly: true });
+      const sharedPayload = buildSharedPayload(baseConfig);
 
       /** @type {Partial<TStartupConfig>} */
       const payload = {
-        ...buildSharedPayload(baseConfig),
+        ...sharedPayload,
         socialLogins: baseConfig?.registration?.socialLogins ?? defaultSocialLogins,
         turnstile: baseConfig?.turnstileConfig,
         ...(cloudFront ? { cloudFront } : {}),
@@ -262,10 +263,11 @@ router.get('/', async function (req, res) {
     });
 
     const balanceConfig = getBalanceConfig(appConfig);
+    const sharedPayload = buildSharedPayload(appConfig);
 
     /** @type {TStartupConfig} */
     const payload = {
-      ...buildSharedPayload(appConfig),
+      ...sharedPayload,
       socialLogins: appConfig?.registration?.socialLogins ?? defaultSocialLogins,
       interface: appConfig?.interfaceConfig,
       turnstile: appConfig?.turnstileConfig,

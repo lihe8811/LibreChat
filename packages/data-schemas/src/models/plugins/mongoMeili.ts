@@ -78,6 +78,7 @@ const isSearchEnabled = (): boolean =>
 
 const isMeiliEnabled = (): boolean =>
   process.env.MEILI_HOST != null && process.env.MEILI_MASTER_KEY != null && isSearchEnabled();
+const isTestEnv = process.env.NODE_ENV === 'test';
 
 /**
  * Get sync configuration from environment variables
@@ -460,6 +461,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       if (!isIndexableDocument(this)) {
         return next();
       }
@@ -504,6 +509,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       try {
         if (!isIndexableDocument(this)) {
           await index.deleteDocument(String(this[primaryKey as keyof DocumentWithMeiliIndex]));
@@ -533,6 +542,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       try {
         await index.deleteDocument(String(this[primaryKey as keyof DocumentWithMeiliIndex]));
         next();
