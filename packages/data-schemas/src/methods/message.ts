@@ -309,7 +309,10 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
       if (message) {
         const query = Message.find({ conversationId, user: userId });
         return await query.deleteMany({
-          createdAt: { $gt: message.createdAt },
+          $or: [
+            { createdAt: { $gt: message.createdAt } },
+            { createdAt: message.createdAt, _id: { $gt: message._id } },
+          ],
         });
       }
       return undefined;

@@ -1,4 +1,3 @@
-const { getFiles } = require('~/models/File');
 const axios = require('axios');
 const fetch = require('node-fetch');
 const { v4: uuidv4 } = require('uuid');
@@ -7,7 +6,6 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const { Tool } = require('@librechat/agents/langchain/tools');
 const { createMinimalRetentionRequest } = require('@librechat/api');
 const { FileContext, ContentTypes } = require('librechat-data-provider');
-const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 
 const fluxApiJsonSchema = {
   type: 'object',
@@ -225,6 +223,7 @@ class FluxAPI extends Tool {
         logger.debug('[FluxAPI] Getting image file for editing:', imageId);
 
         // Get the file from the database
+        const { getFiles } = require('~/models');
         const files = await getFiles({ file_id: imageId });
 
         if (!files || files.length === 0) {
@@ -289,7 +288,9 @@ class FluxAPI extends Tool {
     // Submit the task
     let taskResponse;
     try {
-      logger.debug(`[FluxAPI] Submitting ${isEdit ? 'edit' : 'generation'} task to ${generateEndpoint}`);
+      logger.debug(
+        `[FluxAPI] Submitting ${isEdit ? 'edit' : 'generation'} task to ${generateEndpoint}`,
+      );
       taskResponse = await axios.post(generateEndpoint, requestBody, {
         baseURL: this.baseUrl,
         headers: {
