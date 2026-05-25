@@ -1,3 +1,5 @@
+jest.mock('~/cache/getLogStores');
+
 const mockGetAppConfig = jest.fn();
 jest.mock('~/server/services/Config/app', () => ({
   getAppConfig: (...args) => mockGetAppConfig(...args),
@@ -19,9 +21,16 @@ jest.mock('@librechat/data-schemas', () => ({
 }));
 
 const mockGetCloudFrontConfig = jest.fn(() => null);
+const mockResolveBuildInfo = jest.fn(() => ({
+  commit: null,
+  commitShort: null,
+  branch: null,
+  buildDate: null,
+}));
 jest.mock('@librechat/api', () => ({
   ...jest.requireActual('@librechat/api'),
   getCloudFrontConfig: (...args) => mockGetCloudFrontConfig(...args),
+  resolveBuildInfo: (...args) => mockResolveBuildInfo(...args),
 }));
 
 const request = require('supertest');
@@ -74,6 +83,12 @@ const mockUser = {
 
 afterEach(() => {
   jest.resetAllMocks();
+  mockResolveBuildInfo.mockReturnValue({
+    commit: null,
+    commitShort: null,
+    branch: null,
+    buildDate: null,
+  });
   delete process.env.ALLOW_ACCOUNT_DELETION;
   delete process.env.ALLOW_PASSWORD_RESET;
   delete process.env.ALLOW_REGISTRATION;
@@ -81,6 +96,8 @@ afterEach(() => {
   delete process.env.APP_TITLE;
   delete process.env.CHECK_BALANCE;
   delete process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES;
+  delete process.env.DISCORD_CLIENT_ID;
+  delete process.env.DISCORD_CLIENT_SECRET;
   delete process.env.DOMAIN_SERVER;
   delete process.env.GITHUB_CLIENT_ID;
   delete process.env.GITHUB_CLIENT_SECRET;
@@ -240,6 +257,49 @@ describe('GET /api/config', () => {
       expect(response.body.allowAccountDeletion).toBe(true);
     });
 
+    it('omits buildInfo in unauthenticated response when interface.buildInfo is false', async () => {
+      mockGetAppConfig.mockResolvedValue({
+        ...baseAppConfig,
+        interfaceConfig: { ...baseAppConfig.interfaceConfig, buildInfo: false },
+      });
+      mockResolveBuildInfo.mockReturnValue({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).not.toHaveProperty('buildInfo');
+      expect(response.body.interface).toEqual({
+        privacyPolicy: { externalUrl: 'https://example.com/privacy' },
+        termsOfService: { externalUrl: 'https://example.com/tos' },
+        buildInfo: false,
+      });
+    });
+
+    it('includes buildInfo in unauthenticated response when enabled', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockResolveBuildInfo.mockReturnValue({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.buildInfo).toEqual({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+    });
+
     it('returns 500 when getAppConfig throws', async () => {
       mockGetAppConfig.mockRejectedValue(new Error('Config service failure'));
       const app = createApp(null);
@@ -291,6 +351,72 @@ describe('GET /api/config', () => {
       expect(response.body.modelSpecs).toEqual({ list: [{ name: 'test-spec' }] });
       expect(response.body.balance).toEqual({ enabled: true, startBalance: 10000 });
       expect(response.body.webSearch).toEqual({ searchProvider: 'tavily' });
+    });
+
+    it('should strip private prompt fields from model spec presets', async () => {
+      mockGetAppConfig.mockResolvedValue({
+        ...baseAppConfig,
+        modelSpecs: {
+          enforce: false,
+          prioritize: true,
+          list: [
+            {
+              name: 'guarded-spec',
+              label: 'Guarded Spec',
+              preset: {
+                endpoint: 'openAI',
+                model: 'gpt-4o',
+                promptPrefix: 'private prompt prefix',
+                instructions: 'private assistant instructions',
+                additional_instructions: 'private additional instructions',
+                system: 'private bedrock system',
+                context: 'private context',
+                examples: [{ input: { content: 'a' }, output: { content: 'b' } }],
+                greeting: 'Hello',
+              },
+            },
+          ],
+        },
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.modelSpecs.list[0].preset).toEqual({
+        endpoint: 'openAI',
+        model: 'gpt-4o',
+        greeting: 'Hello',
+      });
+    });
+
+    it('should include full interface config', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.interface).toEqual(baseAppConfig.interfaceConfig);
+    });
+
+    it('includes buildInfo in authenticated response when enabled', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockResolveBuildInfo.mockReturnValue({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.buildInfo).toEqual({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
     });
 
     it('includes branding and authenticated-only env var fields', async () => {
@@ -346,6 +472,24 @@ describe('GET /api/config', () => {
 
       expect(response.body.allowAccountDeletion).toBe(true);
       expect(mockHasCapability).not.toHaveBeenCalled();
+    });
+
+    it('omits buildInfo in authenticated response when interface.buildInfo is false', async () => {
+      mockGetAppConfig.mockResolvedValue({
+        ...baseAppConfig,
+        interfaceConfig: { ...baseAppConfig.interfaceConfig, buildInfo: false },
+      });
+      mockResolveBuildInfo.mockReturnValue({
+        commit: 'abcdef1234567890abcdef1234567890abcdef12',
+        commitShort: 'abcdef1',
+        branch: 'dev',
+        buildDate: '2026-04-20T12:00:00Z',
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).not.toHaveProperty('buildInfo');
     });
   });
 });

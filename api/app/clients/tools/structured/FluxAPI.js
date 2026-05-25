@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const { logger } = require('@librechat/data-schemas');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { Tool } = require('@librechat/agents/langchain/tools');
+const { createMinimalRetentionRequest } = require('@librechat/api');
 const { FileContext, ContentTypes } = require('librechat-data-provider');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 
@@ -107,6 +108,7 @@ class FluxAPI extends Tool {
 
     this.userId = fields.userId;
     this.tenantId = fields.req?.user?.tenantId;
+    this.retentionRequest = createMinimalRetentionRequest(fields.req);
     this.fileStrategy = fields.fileStrategy;
 
     /** @type {boolean} **/
@@ -393,6 +395,7 @@ class FluxAPI extends Tool {
         basePath: 'images',
         context: FileContext.image_generation,
         tenantId: this.tenantId,
+        req: this.retentionRequest,
       });
 
       logger.debug('[FluxAPI] Image saved to path:', result.filepath);
@@ -616,6 +619,7 @@ class FluxAPI extends Tool {
         basePath: 'images',
         context: FileContext.image_generation,
         tenantId: this.tenantId,
+        req: this.retentionRequest,
       });
 
       logger.debug('[FluxAPI] Finetuned image saved to path:', result.filepath);
