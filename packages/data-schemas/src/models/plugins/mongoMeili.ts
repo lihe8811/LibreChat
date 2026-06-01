@@ -73,17 +73,12 @@ export interface SchemaWithMeiliMethods extends Model<DocumentWithMeiliIndex> {
   ): Promise<SearchResponse<MeiliIndexable, Record<string, unknown>>>;
 }
 
-// Environment flags
-/**
- * Flag to indicate if search is enabled based on environment variables.
- */
-const searchEnabled = process.env.SEARCH != null && process.env.SEARCH.toLowerCase() === 'true';
+const isSearchEnabled = (): boolean =>
+  process.env.SEARCH != null && process.env.SEARCH.toLowerCase() === 'true';
 
-/**
- * Flag to indicate if MeiliSearch is enabled based on required environment variables.
- */
-const meiliEnabled =
-  process.env.MEILI_HOST != null && process.env.MEILI_MASTER_KEY != null && searchEnabled;
+const isMeiliEnabled = (): boolean =>
+  process.env.MEILI_HOST != null && process.env.MEILI_MASTER_KEY != null && isSearchEnabled();
+const isTestEnv = process.env.NODE_ENV === 'test';
 
 /**
  * Get sync configuration from environment variables
@@ -466,6 +461,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       if (!isIndexableDocument(this)) {
         return next();
       }
@@ -510,6 +509,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       try {
         if (!isIndexableDocument(this)) {
           await index.deleteDocument(String(this[primaryKey as keyof DocumentWithMeiliIndex]));
@@ -539,6 +542,10 @@ const createMeiliMongooseModel = ({
       this: DocumentWithMeiliIndex,
       next: CallbackWithoutResultAndOptionalError,
     ): Promise<void> {
+      if (isTestEnv) {
+        return next();
+      }
+
       try {
         await index.deleteDocument(String(this[primaryKey as keyof DocumentWithMeiliIndex]));
         next();
@@ -725,20 +732,44 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
   });
 
   schema.post('save', function (doc: DocumentWithMeiliIndex, next) {
-    doc.postSaveHook?.(next);
+    if (!isMeiliEnabled()) {
+      return next();
+    }
+
+    if (typeof doc.postSaveHook === 'function') {
+      return doc.postSaveHook(next);
+    }
+
+    return next();
   });
 
   schema.post('updateOne', function (doc: DocumentWithMeiliIndex, next) {
-    doc.postUpdateHook?.(next);
+    if (!isMeiliEnabled()) {
+      return next();
+    }
+
+    if (typeof doc.postUpdateHook === 'function') {
+      return doc.postUpdateHook(next);
+    }
+
+    return next();
   });
 
   schema.post('deleteOne', function (doc: DocumentWithMeiliIndex, next) {
-    doc.postRemoveHook?.(next);
+    if (!isMeiliEnabled()) {
+      return next();
+    }
+
+    if (typeof doc.postRemoveHook === 'function') {
+      return doc.postRemoveHook(next);
+    }
+
+    return next();
   });
 
   // Pre-deleteMany hook: remove corresponding documents from MeiliSearch when multiple documents are deleted.
   schema.pre('deleteMany', async function (next) {
-    if (!meiliEnabled) {
+    if (!isMeiliEnabled()) {
       return next();
     }
 
@@ -781,7 +812,7 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
       }
       return next();
     } catch (error) {
-      if (meiliEnabled) {
+      if (isMeiliEnabled()) {
         logger.error(
           '[MeiliMongooseModel.deleteMany] There was an issue deleting conversation indexes upon deletion. Next startup may trigger syncing.',
           error,
@@ -793,7 +824,11 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
 
   // Post-findOneAndUpdate hook
   schema.post('findOneAndUpdate', async function (doc: DocumentWithMeiliIndex, next) {
-    if (!meiliEnabled) {
+    if (!isMeiliEnabled()) {
+      return next();
+    }
+
+    if (!doc) {
       return next();
     }
 

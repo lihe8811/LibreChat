@@ -68,12 +68,14 @@ jobs:
         id: create-pull-request
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.LOCIZE_PR_TOKEN }}
+          token: ${{ secrets.PAT }}
+          sign-commits: true
           add-paths: |
             client/src/locales/**
           commit-message: "🌍 i18n: Update translation.json with latest translations"
           base: main
           branch: i18n/locize-translation-update
+          reviewers: lihe8811
           title: "🌍 i18n: Update translation.json with latest translations"
           body: |
             **Description**:
@@ -85,9 +87,9 @@ jobs:
       - name: Request Reviewer
         if: ${{ steps.create-pull-request.outputs.pull-request-number != '' }}
         env:
-          GH_TOKEN: ${{ secrets.LOCIZE_PR_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT }}
           PR_NUMBER: ${{ steps.create-pull-request.outputs.pull-request-number }}
-          REVIEWER: danny-avila
+          REVIEWER: lihe8811
         run: |
           author="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json author --jq '.author.login')"
 

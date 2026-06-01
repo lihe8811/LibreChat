@@ -175,6 +175,39 @@ test('calls loginUser.mutate on login', async () => {
   waitFor(() => expect(mutate).toHaveBeenCalled());
 });
 
+test('allows username login when email login disabled', async () => {
+  const mutate = jest.fn();
+  const usernameConfig = {
+    ...mockStartupConfig,
+    data: {
+      ...mockStartupConfig.data,
+      emailLoginEnabled: false,
+    },
+  };
+
+  const { getByLabelText } = setup({
+    // @ts-ignore - we don't need all parameters of the QueryObserverResult
+    useLoginUserReturnValue: {
+      isLoading: false,
+      mutate,
+      isError: false,
+    },
+    useGetStartupConfigReturnValue: usernameConfig,
+  });
+
+  const usernameInput = getByLabelText(/username/i);
+  const passwordInput = getByLabelText(/password/i);
+  const submitButton = getByTestId(document.body, 'login-button');
+
+  await userEvent.type(usernameInput, 'TestUser');
+  await userEvent.type(passwordInput, 'password');
+  await userEvent.click(submitButton);
+
+  await waitFor(() =>
+    expect(mutate).toHaveBeenCalledWith({ username: 'testuser', password: 'password' }),
+  );
+});
+
 test('Navigates to / on successful login', async () => {
   const { getByLabelText, history } = setup({
     // @ts-ignore - we don't need all parameters of the QueryObserverResult

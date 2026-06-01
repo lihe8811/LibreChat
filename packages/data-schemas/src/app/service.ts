@@ -117,6 +117,7 @@ export const AppService = async (params?: {
     config,
     memory,
     speech,
+    branding: config.branding ?? configDefaults.branding,
     balance,
     actions,
     webSearch,

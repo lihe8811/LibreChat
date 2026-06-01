@@ -6,7 +6,7 @@ const {
   resolveBuildInfo,
   sanitizeModelSpecs,
 } = require('@librechat/api');
-const { defaultSocialLogins } = require('librechat-data-provider');
+const { defaultSocialLogins, removeNullishValues } = require('librechat-data-provider');
 const { logger, getTenantId, SystemCapabilities } = require('@librechat/data-schemas');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const { getLdapConfig } = require('~/server/services/Config/ldap');
@@ -39,6 +39,61 @@ function isBirthday() {
   return today.getMonth() === 1 && today.getDate() === 11;
 }
 
+function resolveBrandingValue(value, logoVariant, fallback) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+
+  if (value && typeof value === 'object') {
+    const rawVariantValue = value[logoVariant];
+    const rawDefaultValue = value.default;
+    const variantValue =
+      typeof rawVariantValue === 'string' && rawVariantValue.trim().length > 0
+        ? rawVariantValue.trim()
+        : '';
+    const defaultValue =
+      typeof rawDefaultValue === 'string' && rawDefaultValue.trim().length > 0
+        ? rawDefaultValue.trim()
+        : '';
+    return variantValue || defaultValue || fallback;
+  }
+
+  return fallback;
+}
+
+function buildBrandingPayload(appConfig, includeHelpAndFaqURL = true) {
+  const configBranding = appConfig?.branding;
+  const configLogoVariant = configBranding?.logoVariant?.trim();
+  const logoVariant =
+    configLogoVariant && configLogoVariant.length > 0 ? configLogoVariant : 'default';
+  const assetPrefix = logoVariant === 'default' ? 'assets' : `assets/${logoVariant}`;
+  const appTitle = resolveBrandingValue(
+    configBranding?.appTitle,
+    logoVariant,
+    process.env.APP_TITLE || 'LibreChat',
+  );
+  const helpAndFaqURL = resolveBrandingValue(
+    configBranding?.helpAndFaqURL,
+    logoVariant,
+    process.env.HELP_AND_FAQ_URL || 'https://librechat.ai',
+  );
+
+  const branding = removeNullishValues({
+    ...(configBranding ?? {}),
+    logoVariant,
+    assetPrefix,
+    appTitle,
+    ...(includeHelpAndFaqURL ? { helpAndFaqURL } : {}),
+  });
+
+  return {
+    appTitle,
+    ...(includeHelpAndFaqURL ? { helpAndFaqURL } : {}),
+    branding,
+  };
+}
+
 /**
  * Pre-login fields rendered by the unauthenticated login, registration, password-reset,
  * and email-verification pages. Any field added here is readable by anonymous callers
@@ -46,7 +101,7 @@ function isBirthday() {
  *
  * See client consumers under `client/src/components/Auth/` and `client/src/routes/Layouts/Startup.tsx`.
  */
-function buildPreLoginPayload() {
+function buildPreLoginPayload(appConfig) {
   const isOpenIdEnabled =
     !!process.env.OPENID_CLIENT_ID &&
     (isEnabled(process.env.OPENID_USE_PKCE) || !!process.env.OPENID_CLIENT_SECRET?.trim()) &&
@@ -60,10 +115,11 @@ function buildPreLoginPayload() {
     !!process.env.SAML_SESSION_SECRET;
 
   const ldap = getLdapConfig();
+  const brandingPayload = buildBrandingPayload(appConfig, false);
 
   /** @type {Partial<TStartupConfig>} */
   const payload = {
-    appTitle: process.env.APP_TITLE || 'LibreChat',
+    ...brandingPayload,
     discordLoginEnabled: !!process.env.DISCORD_CLIENT_ID && !!process.env.DISCORD_CLIENT_SECRET,
     facebookLoginEnabled: !!process.env.FACEBOOK_CLIENT_ID && !!process.env.FACEBOOK_CLIENT_SECRET,
     githubLoginEnabled: !!process.env.GITHUB_CLIENT_ID && !!process.env.GITHUB_CLIENT_SECRET,
@@ -128,14 +184,16 @@ function buildPublicSharePayload() {
  * openid token-reuse marker) and are not needed on the pre-login screens, so they
  * are not exposed to unauthenticated callers.
  */
-function buildPostLoginPayload() {
+function buildPostLoginPayload(appConfig) {
+  const brandingPayload = buildBrandingPayload(appConfig);
+
   /** @type {Partial<TStartupConfig>} */
   const payload = {
+    ...brandingPayload,
     showBirthdayIcon:
       isBirthday() ||
       isEnabled(process.env.SHOW_BIRTHDAY_ICON) ||
       process.env.SHOW_BIRTHDAY_ICON === '',
-    helpAndFaqURL: process.env.HELP_AND_FAQ_URL || 'https://librechat.ai',
     sharedLinksEnabled,
     publicSharedLinksEnabled,
     openidReuseTokens,
@@ -202,13 +260,13 @@ function buildCloudFrontStartupConfig() {
 
 router.get('/', async function (req, res) {
   try {
-    const preLoginPayload = buildPreLoginPayload();
-    const publicSharePayload = buildPublicSharePayload();
     const rum = getRumConfig();
-
+    const cloudFront = buildCloudFrontStartupConfig();
     if (!req.user) {
       const tenantId = getTenantId();
       const baseConfig = await getAppConfig(tenantId ? { tenantId } : { baseOnly: true });
+      const preLoginPayload = buildPreLoginPayload(baseConfig);
+      const publicSharePayload = buildPublicSharePayload();
 
       /** @type {Partial<TStartupConfig>} */
       const payload = {
@@ -249,13 +307,14 @@ router.get('/', async function (req, res) {
     });
 
     const balanceConfig = getBalanceConfig(appConfig);
-    const cloudFront = buildCloudFrontStartupConfig();
+    const preLoginPayload = buildPreLoginPayload(appConfig);
+    const publicSharePayload = buildPublicSharePayload();
 
     /** @type {TStartupConfig} */
     const payload = {
       ...preLoginPayload,
       ...publicSharePayload,
-      ...buildPostLoginPayload(),
+      ...buildPostLoginPayload(appConfig),
       socialLogins: appConfig?.registration?.socialLogins ?? defaultSocialLogins,
       interface: appConfig?.interfaceConfig,
       turnstile: appConfig?.turnstileConfig,

@@ -22,6 +22,7 @@ const domains = {
   client: process.env.DOMAIN_CLIENT,
   server: process.env.DOMAIN_SERVER,
 };
+const oauthErrorRedirect = domains.server ? `${domains.server}/oauth/error` : '/oauth/error';
 
 router.use(logHeaders);
 router.use(loginLimiter);
@@ -52,7 +53,7 @@ router.get(
 router.get(
   '/google/callback',
   passport.authenticate('google', {
-    failureRedirect: `${domains.client}/oauth/error`,
+    failureRedirect: oauthErrorRedirect,
     failureMessage: true,
     session: false,
     scope: ['openid', 'profile', 'email'],
@@ -77,7 +78,7 @@ router.get(
 router.get(
   '/facebook/callback',
   passport.authenticate('facebook', {
-    failureRedirect: `${domains.client}/oauth/error`,
+    failureRedirect: oauthErrorRedirect,
     failureMessage: true,
     session: false,
     scope: ['public_profile'],
@@ -101,7 +102,7 @@ router.get('/openid', (req, res, next) => {
 router.get(
   '/openid/callback',
   passport.authenticate('openid', {
-    failureRedirect: `${domains.client}/oauth/error`,
+    failureRedirect: oauthErrorRedirect,
     failureMessage: true,
     session: false,
   }),
@@ -124,7 +125,7 @@ router.get(
 router.get(
   '/github/callback',
   passport.authenticate('github', {
-    failureRedirect: `${domains.client}/oauth/error`,
+    failureRedirect: oauthErrorRedirect,
     failureMessage: true,
     session: false,
     scope: ['user:email', 'read:user'],
@@ -148,7 +149,7 @@ router.get(
 router.get(
   '/discord/callback',
   passport.authenticate('discord', {
-    failureRedirect: `${domains.client}/oauth/error`,
+    failureRedirect: oauthErrorRedirect,
     failureMessage: true,
     session: false,
     scope: ['identify', 'email'],
@@ -171,7 +172,7 @@ router.get(
 router.post(
   '/apple/callback',
   passport.authenticate('apple', {
-    failureRedirect: `${domains.client}/oauth/error`,
+    failureRedirect: oauthErrorRedirect,
     failureMessage: true,
     session: false,
   }),
@@ -193,7 +194,7 @@ router.get(
 router.post(
   '/saml/callback',
   passport.authenticate('saml', {
-    failureRedirect: `${domains.client}/oauth/error`,
+    failureRedirect: oauthErrorRedirect,
     failureMessage: true,
     session: false,
   }),

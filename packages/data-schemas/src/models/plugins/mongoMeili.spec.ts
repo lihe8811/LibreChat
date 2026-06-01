@@ -89,6 +89,7 @@ describe('Meilisearch Mongoose plugin', () => {
     process.env = {
       ...OLD_ENV,
       // Set a fake meilisearch host/key so that we activate the meilisearch plugin
+      SEARCH: 'true',
       MEILI_HOST: 'foo',
       MEILI_MASTER_KEY: 'bar',
     };

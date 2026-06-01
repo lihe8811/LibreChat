@@ -73,6 +73,22 @@ describe('Zod Schemas', () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it('should validate username when email login is disabled', () => {
+      const originalAllowEmail = process.env.ALLOW_EMAIL_LOGIN;
+      process.env.ALLOW_EMAIL_LOGIN = 'false';
+
+      jest.isolateModules(() => {
+        const { loginSchema: usernameLoginSchema } = require('./validators');
+        const result = usernameLoginSchema.safeParse({
+          username: 'john_doe',
+          password: 'password123',
+        });
+        expect(result.success).toBe(true);
+      });
+
+      process.env.ALLOW_EMAIL_LOGIN = originalAllowEmail;
+    });
   });
 
   describe('registerSchema', () => {
