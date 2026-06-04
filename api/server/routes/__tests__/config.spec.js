@@ -9,6 +9,10 @@ jest.mock('~/server/services/Config/ldap', () => ({
   getLdapConfig: jest.fn(() => null),
 }));
 
+jest.mock('~/server/services/Config/rum', () => ({
+  getRumConfig: jest.fn(() => null),
+}));
+
 const mockHasCapability = jest.fn();
 jest.mock('~/server/middleware/roles/capabilities', () => ({
   hasCapability: (...args) => mockHasCapability(...args),
@@ -115,6 +119,8 @@ afterEach(() => {
   delete process.env.SANDPACK_BUNDLER_URL;
   delete process.env.SANDPACK_STATIC_BUNDLER_URL;
   delete process.env.START_BALANCE;
+  delete process.env.ANALYTICS_GTM_ID;
+  delete process.env.CUSTOM_FOOTER;
 });
 
 describe('GET /api/config', () => {
@@ -165,9 +171,60 @@ describe('GET /api/config', () => {
       expect(response.statusCode).toBe(200);
       expect(response.body).not.toHaveProperty('balance');
       expect(response.body).not.toHaveProperty('bundlerURL');
+      expect(response.body).not.toHaveProperty('staticBundlerURL');
+      expect(response.body).not.toHaveProperty('sharePointFilePickerEnabled');
+      expect(response.body).not.toHaveProperty('sharePointBaseUrl');
+      expect(response.body).not.toHaveProperty('sharePointPickerGraphScope');
+      expect(response.body).not.toHaveProperty('sharePointPickerSharePointScope');
       expect(response.body).not.toHaveProperty('conversationImportMaxFileSize');
       expect(response.body).not.toHaveProperty('modelSpecs');
       expect(response.body).not.toHaveProperty('webSearch');
+    });
+
+    it('should strip authenticated-only informational fields from unauthenticated response (#12688)', async () => {
+      process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
+      process.env.CUSTOM_FOOTER = 'internal footer text';
+      process.env.HELP_AND_FAQ_URL = 'https://internal.example.com/faq';
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toHaveProperty('showBirthdayIcon');
+      expect(response.body).not.toHaveProperty('helpAndFaqURL');
+      expect(response.body).not.toHaveProperty('sharedLinksEnabled');
+      expect(response.body).not.toHaveProperty('publicSharedLinksEnabled');
+      expect(response.body).not.toHaveProperty('analyticsGtmId');
+      expect(response.body).not.toHaveProperty('openidReuseTokens');
+      expect(response.body).not.toHaveProperty('allowAccountDeletion');
+      expect(response.body).not.toHaveProperty('customFooter');
+    });
+
+    it('should include public share footer fields when share context is requested', async () => {
+      process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
+      process.env.CUSTOM_FOOTER = 'public footer text';
+      process.env.HELP_AND_FAQ_URL = 'https://internal.example.com/faq';
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config?context=share');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.analyticsGtmId).toBe('GTM-XYZ');
+      expect(response.body.customFooter).toBe('public footer text');
+      expect(response.body).not.toHaveProperty('helpAndFaqURL');
+      expect(response.body).not.toHaveProperty('allowAccountDeletion');
+    });
+
+    it('should include socialLogins and turnstile from base config', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.socialLogins).toEqual(['google', 'github']);
+      expect(response.body.turnstile).toEqual({ siteKey: 'test-key' });
     });
 
     it('includes only privacyPolicy and termsOfService from interface config', async () => {
@@ -190,7 +247,7 @@ describe('GET /api/config', () => {
       const response = await request(app).get('/api/config');
 
       expect(response.body.appTitle).toBe('Qingfan Title');
-      expect(response.body.helpAndFaqURL).toBe('https://example.com/qingfan-help');
+      expect(response.body).not.toHaveProperty('helpAndFaqURL');
       expect(response.body.branding).toEqual(
         expect.objectContaining({
           appTitle: 'Qingfan Title',
@@ -201,7 +258,7 @@ describe('GET /api/config', () => {
       );
     });
 
-    it('should advertise CloudFront cookie refresh only when signed-cookie mode is active', async () => {
+    it('should omit CloudFront cookie refresh from unauthenticated response (#12688)', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
       mockGetCloudFrontConfig.mockReturnValue({
         domain: 'https://cdn.example.com',
@@ -209,24 +266,6 @@ describe('GET /api/config', () => {
         cookieDomain: '.example.com',
         privateKey: 'test-private-key',
         keyPairId: 'K123ABC',
-      });
-      const app = createApp(null);
-
-      const response = await request(app).get('/api/config');
-
-      expect(response.body.cloudFront).toEqual({
-        cookieRefresh: {
-          endpoint: '/api/auth/cloudfront/refresh',
-          domain: 'https://cdn.example.com',
-        },
-      });
-    });
-
-    it('should omit CloudFront cookie refresh when signed-cookie mode is inactive', async () => {
-      mockGetAppConfig.mockResolvedValue(baseAppConfig);
-      mockGetCloudFrontConfig.mockReturnValue({
-        domain: 'https://cdn.example.com',
-        imageSigning: 'url',
       });
       const app = createApp(null);
 
@@ -246,15 +285,6 @@ describe('GET /api/config', () => {
       const response = await request(app).get('/api/config');
 
       expect(response.body).not.toHaveProperty('cloudFront');
-    });
-
-    it('defaults allowAccountDeletion to true when env var is unset', async () => {
-      mockGetAppConfig.mockResolvedValue(baseAppConfig);
-      const app = createApp(null);
-
-      const response = await request(app).get('/api/config');
-
-      expect(response.body.allowAccountDeletion).toBe(true);
     });
 
     it('omits buildInfo in unauthenticated response when interface.buildInfo is false', async () => {
@@ -418,6 +448,90 @@ describe('GET /api/config', () => {
       expect(response.body.bundlerURL).toBe('https://bundler.test');
       expect(response.body.staticBundlerURL).toBe('https://static-bundler.test');
       expect(response.body.conversationImportMaxFileSize).toBe(5000000);
+    });
+
+    it('should include post-login informational fields', async () => {
+      process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
+      process.env.CUSTOM_FOOTER = 'authenticated footer text';
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).toHaveProperty('helpAndFaqURL');
+      expect(response.body).toHaveProperty('sharedLinksEnabled');
+      expect(response.body).toHaveProperty('publicSharedLinksEnabled');
+      expect(response.body).toHaveProperty('showBirthdayIcon');
+      expect(response.body).toHaveProperty('openidReuseTokens');
+      expect(response.body.analyticsGtmId).toBe('GTM-XYZ');
+      expect(response.body.customFooter).toBe('authenticated footer text');
+    });
+
+    it('should advertise CloudFront cookie refresh when signed-cookie mode is active', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockGetCloudFrontConfig.mockReturnValue({
+        domain: 'https://cdn.example.com',
+        imageSigning: 'cookies',
+        cookieDomain: '.example.com',
+        privateKey: 'test-private-key',
+        keyPairId: 'K123ABC',
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.cloudFront).toEqual({
+        cookieRefresh: {
+          endpoint: '/api/auth/cloudfront/refresh',
+          domain: 'https://cdn.example.com',
+        },
+      });
+    });
+
+    it('should omit CloudFront cookie refresh when signed-cookie mode is inactive', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockGetCloudFrontConfig.mockReturnValue({
+        domain: 'https://cdn.example.com',
+        imageSigning: 'url',
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).not.toHaveProperty('cloudFront');
+    });
+
+    it('should omit CloudFront cookie refresh when cookie mode cannot mint cookies', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockGetCloudFrontConfig.mockReturnValue({
+        domain: 'https://cdn.example.com',
+        imageSigning: 'cookies',
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body).not.toHaveProperty('cloudFront');
+    });
+
+    it('should merge per-user balance override into config', async () => {
+      mockGetAppConfig.mockResolvedValue({
+        ...baseAppConfig,
+        balance: {
+          enabled: true,
+          startBalance: 50000,
+        },
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.balance).toEqual(
+        expect.objectContaining({
+          enabled: true,
+          startBalance: 50000,
+        }),
+      );
     });
 
     it('sets allowAccountDeletion to false for authenticated users without ACCESS_ADMIN', async () => {
