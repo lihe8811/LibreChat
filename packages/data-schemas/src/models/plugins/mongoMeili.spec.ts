@@ -1,9 +1,9 @@
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import { EModelEndpoint } from 'librechat-data-provider';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import mongoMeili, { type SchemaWithMeiliMethods } from '~/models/plugins/mongoMeili';
 import { createConversationModel } from '~/models/convo';
 import { createMessageModel } from '~/models/message';
-import mongoMeili, { type SchemaWithMeiliMethods } from '~/models/plugins/mongoMeili';
 
 interface DynamicMeiliDocument extends mongoose.Document {
   docId: string;
@@ -236,7 +236,9 @@ describe('Meilisearch Mongoose plugin', () => {
   });
 
   test('updating an indexed conversation calls updateDocuments with primaryKey', async () => {
-    const conversationModel = createConversationModel(mongoose);
+    const conversationModel = createConversationModel(
+      mongoose,
+    ) as unknown as SchemaWithMeiliMethods;
     const convo = await conversationModel.create({
       conversationId: new mongoose.Types.ObjectId().toString(),
       user: new mongoose.Types.ObjectId(),
@@ -296,7 +298,9 @@ describe('Meilisearch Mongoose plugin', () => {
   });
 
   test('updateDocuments receives preprocessed data with primaryKey', async () => {
-    const conversationModel = createConversationModel(mongoose);
+    const conversationModel = createConversationModel(
+      mongoose,
+    ) as unknown as SchemaWithMeiliMethods;
     const conversationId = 'abc|def|ghi';
     const convo = await conversationModel.create({
       conversationId,
@@ -317,7 +321,9 @@ describe('Meilisearch Mongoose plugin', () => {
   });
 
   test('sync w/ meili does not include TTL documents', async () => {
-    const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+    const conversationModel = createConversationModel(
+      mongoose,
+    ) as unknown as SchemaWithMeiliMethods;
     await conversationModel.create({
       conversationId: new mongoose.Types.ObjectId(),
       user: new mongoose.Types.ObjectId(),
@@ -333,7 +339,9 @@ describe('Meilisearch Mongoose plugin', () => {
   });
 
   test('sync w/ meili excludes legacy temporary conversations without isTemporary', async () => {
-    const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+    const conversationModel = createConversationModel(
+      mongoose,
+    ) as unknown as SchemaWithMeiliMethods;
     await conversationModel.deleteMany({});
     mockAddDocumentsInBatches.mockClear();
     const conversationId = new mongoose.Types.ObjectId().toString();
@@ -357,7 +365,9 @@ describe('Meilisearch Mongoose plugin', () => {
   });
 
   test('saving hydrated legacy temporary conversations without isTemporary does NOT index', async () => {
-    const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+    const conversationModel = createConversationModel(
+      mongoose,
+    ) as unknown as SchemaWithMeiliMethods;
     await conversationModel.deleteMany({});
     mockAddDocuments.mockClear();
     mockUpdateDocuments.mockClear();
@@ -387,7 +397,9 @@ describe('Meilisearch Mongoose plugin', () => {
   });
 
   test('findOneAndUpdate on legacy temporary conversations without isTemporary does NOT index', async () => {
-    const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+    const conversationModel = createConversationModel(
+      mongoose,
+    ) as unknown as SchemaWithMeiliMethods;
     await conversationModel.deleteMany({});
     mockAddDocuments.mockClear();
     mockUpdateDocuments.mockClear();
@@ -417,7 +429,7 @@ describe('Meilisearch Mongoose plugin', () => {
   });
 
   test('sync w/ meili excludes legacy temporary messages without isTemporary', async () => {
-    const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+    const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
     await messageModel.deleteMany({});
     mockAddDocumentsInBatches.mockClear();
     const messageId = new mongoose.Types.ObjectId().toString();
@@ -502,7 +514,9 @@ describe('Meilisearch Mongoose plugin', () => {
   describe('estimatedDocumentCount usage in syncWithMeili', () => {
     test('syncWithMeili completes successfully with estimatedDocumentCount', async () => {
       // Clear any previous documents
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       // Create test documents
@@ -528,7 +542,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('syncWithMeili handles empty collection correctly', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
 
       // Verify collection is empty
@@ -540,7 +554,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('estimatedDocumentCount returns count for non-empty collection', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       // Create documents
@@ -563,7 +579,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('estimatedDocumentCount is available on model', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
 
       // Verify the method exists and is callable
       expect(typeof messageModel.estimatedDocumentCount).toBe('function');
@@ -575,7 +591,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('syncWithMeili handles mix of syncable and TTL documents correctly', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
       mockAddDocuments.mockClear();
 
@@ -638,7 +654,9 @@ describe('Meilisearch Mongoose plugin', () => {
 
   describe('New batch processing and retry functionality', () => {
     test('processSyncBatch uses addDocumentsInBatches', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
       mockAddDocuments.mockClear();
@@ -662,7 +680,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('addObjectToMeili retries on failure', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
 
       // Mock addDocuments to fail twice then succeed
       mockAddDocuments
@@ -686,7 +706,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('getSyncProgress returns accurate progress information', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       // Insert documents directly to control the _meiliIndex flag
@@ -716,7 +738,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('getSyncProgress excludes TTL documents from counts', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       // Insert syncable documents (expiredAt: null)
@@ -766,7 +790,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('getSyncProgress shows completion when all syncable documents are indexed', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
 
       // All syncable documents are indexed
@@ -808,7 +832,9 @@ describe('Meilisearch Mongoose plugin', () => {
 
   describe('Error handling in processSyncBatch', () => {
     test('syncWithMeili fails when processSyncBatch encounters addDocumentsInBatches error', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
@@ -840,7 +866,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('syncWithMeili fails when processSyncBatch encounters updateMany error', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
@@ -872,7 +900,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('processSyncBatch logs error and throws when addDocumentsInBatches fails', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
 
       mockAddDocumentsInBatches.mockRejectedValueOnce(new Error('Network timeout'));
@@ -898,7 +926,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('processSyncBatch handles empty document array gracefully', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       const indexMock = mockIndex();
 
       // Should not throw with empty array
@@ -909,7 +939,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('syncWithMeili stops processing when batch fails and does not process remaining documents', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
@@ -940,7 +972,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('error in processSyncBatch is properly logged before being thrown', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
 
       const testError = new Error('Test error for logging');
@@ -963,7 +995,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('syncWithMeili properly propagates processSyncBatch errors', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
@@ -1004,7 +1038,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex deletes orphaned documents from MeiliSearch', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       const existingConvoId = new mongoose.Types.ObjectId().toString();
@@ -1038,7 +1074,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex handles offset correctly when documents are deleted', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
 
       const existingIds = [
@@ -1094,7 +1130,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex preserves existing documents', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       const existingId1 = new mongoose.Types.ObjectId().toString();
@@ -1133,7 +1171,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex handles empty MeiliSearch index', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
 
       // Mock empty MeiliSearch index
       mockGetDocuments.mockResolvedValueOnce({
@@ -1149,7 +1187,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex stops when results.length < batchSize', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       const id1 = new mongoose.Types.ObjectId().toString();
@@ -1188,7 +1228,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex handles multiple batches correctly', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
 
       const existingIds = Array.from({ length: 5 }, () => new mongoose.Types.ObjectId().toString());
@@ -1244,7 +1284,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex handles delay between batches', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       const id1 = new mongoose.Types.ObjectId().toString();
@@ -1291,7 +1333,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex handles errors gracefully', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
 
       mockGetDocuments.mockRejectedValueOnce(new Error('MeiliSearch connection error'));
 
@@ -1304,7 +1346,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex with all documents being orphaned', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       const orphanedId1 = new mongoose.Types.ObjectId().toString();
@@ -1328,7 +1372,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('cleanupMeiliIndex adjusts offset to 0 when all batch documents are deleted', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
 
       const orphanedIds = Array.from({ length: 3 }, () => new mongoose.Types.ObjectId().toString());
@@ -1376,7 +1420,9 @@ describe('Meilisearch Mongoose plugin', () => {
 
   describe('processSyncBatch does not modify updatedAt timestamps', () => {
     test('syncWithMeili preserves original updatedAt on conversations', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
@@ -1427,7 +1473,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('syncWithMeili preserves original updatedAt on messages', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
@@ -1475,7 +1521,9 @@ describe('Meilisearch Mongoose plugin', () => {
 
   describe('Missing _meiliIndex property handling in sync process', () => {
     test('syncWithMeili includes documents with missing _meiliIndex', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
@@ -1530,7 +1578,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('getSyncProgress counts documents with missing _meiliIndex as not indexed', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
 
       // Insert documents with different _meiliIndex states
@@ -1572,7 +1620,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('query with _meiliIndex: { $ne: true } includes missing values', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
 
       // Insert documents with different _meiliIndex states
@@ -1616,7 +1666,7 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('syncWithMeili processes all documents where _meiliIndex is not true', async () => {
-      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const messageModel = createMessageModel(mongoose) as unknown as SchemaWithMeiliMethods;
       await messageModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
@@ -1666,7 +1716,9 @@ describe('Meilisearch Mongoose plugin', () => {
     });
 
     test('syncWithMeili treats missing _meiliIndex same as false', async () => {
-      const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationModel = createConversationModel(
+        mongoose,
+      ) as unknown as SchemaWithMeiliMethods;
       await conversationModel.deleteMany({});
       mockAddDocumentsInBatches.mockClear();
 
