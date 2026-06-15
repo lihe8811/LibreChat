@@ -4,12 +4,14 @@ const {
   getBalanceConfig,
   getCloudFrontConfig,
   resolveBuildInfo,
+  resolveTitleTiming,
   sanitizeModelSpecs,
 } = require('@librechat/api');
-const { defaultSocialLogins, removeNullishValues } = require('librechat-data-provider');
+const { EModelEndpoint, defaultSocialLogins, removeNullishValues } = require('librechat-data-provider');
 const { logger, getTenantId, SystemCapabilities } = require('@librechat/data-schemas');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const { getLdapConfig } = require('~/server/services/Config/ldap');
+const { getRumConfig } = require('~/server/services/Config/rum');
 const { getAppConfig } = require('~/server/services/Config/app');
 
 const router = express.Router();
@@ -61,7 +63,7 @@ function resolveBrandingValue(value, logoVariant, fallback) {
   return fallback;
 }
 
-function buildBrandingPayload(appConfig) {
+function buildBrandingPayload(appConfig, { includeHelpAndFaqURL = true } = {}) {
   const configBranding = appConfig?.branding;
   const configLogoVariant = configBranding?.logoVariant?.trim();
   const logoVariant =
@@ -80,18 +82,24 @@ function buildBrandingPayload(appConfig) {
 
   return {
     appTitle,
-    helpAndFaqURL,
     branding: removeNullishValues({
       ...(configBranding ?? {}),
       logoVariant,
       assetPrefix,
       appTitle,
-      helpAndFaqURL,
+      ...(includeHelpAndFaqURL ? { helpAndFaqURL } : {}),
     }),
+    ...(includeHelpAndFaqURL ? { helpAndFaqURL } : {}),
   };
 }
-
-function buildSharedPayload(appConfig) {
+/**
+ * Pre-login fields rendered by the unauthenticated login, registration, password-reset,
+ * and email-verification pages. Any field added here is readable by anonymous callers
+ * of `GET /api/config`, so keep this set strictly to what those pages need.
+ *
+ * See client consumers under `client/src/components/Auth/` and `client/src/routes/Layouts/Startup.tsx`.
+ */
+function buildPreLoginPayload(appConfig) {
   const isOpenIdEnabled =
     !!process.env.OPENID_CLIENT_ID &&
     (isEnabled(process.env.OPENID_USE_PKCE) || !!process.env.OPENID_CLIENT_SECRET?.trim()) &&
@@ -105,7 +113,7 @@ function buildSharedPayload(appConfig) {
     !!process.env.SAML_SESSION_SECRET;
 
   const ldap = getLdapConfig();
-  const brandingPayload = buildBrandingPayload(appConfig);
+  const brandingPayload = buildBrandingPayload(appConfig, { includeHelpAndFaqURL: false });
 
   /** @type {Partial<TStartupConfig>} */
   const payload = {
@@ -136,17 +144,6 @@ function buildSharedPayload(appConfig) {
       !!process.env.EMAIL_PASSWORD &&
       !!process.env.EMAIL_FROM,
     passwordResetEnabled,
-    showBirthdayIcon:
-      isBirthday() ||
-      isEnabled(process.env.SHOW_BIRTHDAY_ICON) ||
-      process.env.SHOW_BIRTHDAY_ICON === '',
-    sharedLinksEnabled,
-    publicSharedLinksEnabled,
-    analyticsGtmId: process.env.ANALYTICS_GTM_ID,
-    openidReuseTokens,
-    allowAccountDeletion:
-      process.env.ALLOW_ACCOUNT_DELETION === undefined ||
-      isEnabled(process.env.ALLOW_ACCOUNT_DELETION),
   };
 
   const minPasswordLength = parseInt(process.env.MIN_PASSWORD_LENGTH, 10);
@@ -158,9 +155,49 @@ function buildSharedPayload(appConfig) {
     payload.ldap = ldap;
   }
 
+  return payload;
+}
+
+/**
+ * Public share fields rendered by `client/src/components/Share/ShareView.tsx`.
+ * They remain off the default anonymous config used by login screens, and are
+ * exposed to anonymous callers only when the client asks for share context.
+ */
+function buildPublicSharePayload() {
+  /** @type {Partial<TStartupConfig>} */
+  const payload = {
+    analyticsGtmId: process.env.ANALYTICS_GTM_ID,
+  };
+
   if (typeof process.env.CUSTOM_FOOTER === 'string') {
     payload.customFooter = process.env.CUSTOM_FOOTER;
   }
+
+  return payload;
+}
+
+/**
+ * Post-login fields appended only when `req.user` is present. These describe the
+ * authenticated UX (account-settings links, share-link feature flags, birthday icon,
+ * openid token-reuse marker) and are not needed on the pre-login screens, so they
+ * are not exposed to unauthenticated callers.
+ */
+function buildPostLoginPayload(appConfig) {
+  /** @type {Partial<TStartupConfig>} */
+  const payload = {
+    ...buildBrandingPayload(appConfig),
+    showBirthdayIcon:
+      isBirthday() ||
+      isEnabled(process.env.SHOW_BIRTHDAY_ICON) ||
+      process.env.SHOW_BIRTHDAY_ICON === '',
+    sharedLinksEnabled,
+    publicSharedLinksEnabled,
+    openidReuseTokens,
+    /** Read inline (not module-level) for per-request evaluation and test isolation */
+    allowAccountDeletion:
+      process.env.ALLOW_ACCOUNT_DELETION === undefined ||
+      isEnabled(process.env.ALLOW_ACCOUNT_DELETION),
+  };
 
   return payload;
 }
@@ -219,18 +256,20 @@ function buildCloudFrontStartupConfig() {
 
 router.get('/', async function (req, res) {
   try {
-    const cloudFront = buildCloudFrontStartupConfig();
+    const publicSharePayload = buildPublicSharePayload();
+    const rum = getRumConfig();
     if (!req.user) {
       const tenantId = getTenantId();
       const baseConfig = await getAppConfig(tenantId ? { tenantId } : { baseOnly: true });
-      const sharedPayload = buildSharedPayload(baseConfig);
+      const preLoginPayload = buildPreLoginPayload(baseConfig);
 
       /** @type {Partial<TStartupConfig>} */
       const payload = {
-        ...sharedPayload,
+        ...preLoginPayload,
+        ...(req.query.context === 'share' ? publicSharePayload : {}),
         socialLogins: baseConfig?.registration?.socialLogins ?? defaultSocialLogins,
         turnstile: baseConfig?.turnstileConfig,
-        ...(cloudFront ? { cloudFront } : {}),
+        ...(rum ? { rum } : {}),
       };
 
       const interfaceConfig = baseConfig?.interfaceConfig;
@@ -263,13 +302,20 @@ router.get('/', async function (req, res) {
     });
 
     const balanceConfig = getBalanceConfig(appConfig);
-    const sharedPayload = buildSharedPayload(appConfig);
+    const preLoginPayload = buildPreLoginPayload(appConfig);
+    const cloudFront = buildCloudFrontStartupConfig();
 
     /** @type {TStartupConfig} */
     const payload = {
-      ...sharedPayload,
+      ...preLoginPayload,
+      ...publicSharePayload,
+      ...buildPostLoginPayload(appConfig),
       socialLogins: appConfig?.registration?.socialLogins ?? defaultSocialLogins,
       interface: appConfig?.interfaceConfig,
+      titleGenerationTiming: resolveTitleTiming({
+        appConfig,
+        endpoint: EModelEndpoint.agents,
+      }),
       turnstile: appConfig?.turnstileConfig,
       modelSpecs: sanitizeModelSpecs(appConfig?.modelSpecs),
       balance: balanceConfig,
@@ -283,6 +329,7 @@ router.get('/', async function (req, res) {
         ? parseInt(process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES, 10)
         : 0,
       ...(cloudFront ? { cloudFront } : {}),
+      ...(rum ? { rum } : {}),
     };
 
     const webSearch = buildWebSearchConfig(appConfig);
