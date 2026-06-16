@@ -1,12 +1,13 @@
-import { Dispatcher, ProxyAgent } from 'undici';
 import { logger } from '@librechat/data-schemas';
 import { AnthropicClientOptions } from '@librechat/agents';
 import {
   anthropicSettings,
+  omitsSamplingParameters,
   removeNullishValues,
   ThinkingDisplay,
   AuthKeys,
 } from 'librechat-data-provider';
+import type { Dispatcher } from 'undici';
 import type {
   AnthropicLLMConfigResult,
   AnthropicConfigOptions,
@@ -25,6 +26,8 @@ import {
   isAnthropicVertexCredentials,
   getVertexDeploymentName,
 } from './vertex';
+import { getProxyDispatcher } from '~/utils/proxy';
+import { mergeHeaders } from '~/utils/headers';
 
 const WEB_SEARCH_BETA = 'web-search-2025-03-05';
 
@@ -51,7 +54,7 @@ function parseCredentials(
 }
 
 /** Known Anthropic parameters that map directly to the client config */
-export const knownAnthropicParams = new Set([
+export const knownAnthropicParams: Set<string> = new Set([
   'model',
   'temperature',
   'topP',
@@ -177,9 +180,12 @@ function getLLMConfig(
     );
   }
 
+  const resolvedModel = requestOptions.model ?? mergedOptions.model;
+  const shouldOmitSamplingParameters = omitsSamplingParameters(resolvedModel);
+
   requestOptions = configureReasoning(requestOptions, systemOptions);
 
-  if (supportsAdaptiveThinking(mergedOptions.model)) {
+  if (supportsAdaptiveThinking(resolvedModel)) {
     if (
       systemOptions.effort &&
       (systemOptions.effort as string) !== '' &&
@@ -204,8 +210,8 @@ function getLLMConfig(
 
   const hasActiveThinking = requestOptions.thinking != null;
   const isThinkingModel =
-    /claude-3[-.]7/.test(mergedOptions.model) || supportsAdaptiveThinking(mergedOptions.model);
-  if (!isThinkingModel || !hasActiveThinking) {
+    /claude-3[-.]7/.test(resolvedModel) || supportsAdaptiveThinking(resolvedModel);
+  if (!shouldOmitSamplingParameters && (!isThinkingModel || !hasActiveThinking)) {
     requestOptions.topP = mergedOptions.topP;
     requestOptions.topK = mergedOptions.topK;
   }
@@ -223,10 +229,10 @@ function getLLMConfig(
     requestOptions.clientOptions.defaultHeaders = headers;
   }
 
-  if (options.proxy && requestOptions.clientOptions) {
-    const proxyAgent = new ProxyAgent(options.proxy);
+  const proxyDispatcher = getProxyDispatcher(options.proxy);
+  if (proxyDispatcher && requestOptions.clientOptions) {
     requestOptions.clientOptions.fetchOptions = {
-      dispatcher: proxyAgent,
+      dispatcher: proxyDispatcher,
     };
   }
 
@@ -293,6 +299,12 @@ function getLLMConfig(
     });
   }
 
+  if (shouldOmitSamplingParameters) {
+    delete requestOptions.temperature;
+    delete requestOptions.topP;
+    delete requestOptions.topK;
+  }
+
   const tools = [];
 
   if (enableWebSearch) {
@@ -320,6 +332,21 @@ function getLLMConfig(
     requestOptions.clientOptions.defaultHeaders = appendAnthropicBetaHeader(
       requestOptions.clientOptions.defaultHeaders as Record<string, string> | undefined,
       FINE_GRAINED_TOOL_STREAMING_BETA,
+    );
+  }
+
+  /**
+   * Attach admin-configured custom headers (e.g. AI-gateway metadata) beneath
+   * the provider-managed headers above, so beta/protocol headers always win.
+   * Placeholders are kept intact here and resolved at request time.
+   */
+  if (options.headers && Object.keys(options.headers).length > 0 && !shouldDropClientOptions) {
+    if (!requestOptions.clientOptions) {
+      requestOptions.clientOptions = {};
+    }
+    requestOptions.clientOptions.defaultHeaders = mergeHeaders(
+      options.headers,
+      requestOptions.clientOptions.defaultHeaders as Record<string, string> | undefined,
     );
   }
 
