@@ -94,8 +94,10 @@ afterEach(() => {
   delete process.env.ALLOW_REGISTRATION;
   delete process.env.ALLOW_SOCIAL_LOGIN;
   delete process.env.APP_TITLE;
+  delete process.env.ANALYTICS_GTM_ID;
   delete process.env.CHECK_BALANCE;
   delete process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES;
+  delete process.env.CUSTOM_FOOTER;
   delete process.env.DISCORD_CLIENT_ID;
   delete process.env.DISCORD_CLIENT_SECRET;
   delete process.env.DOMAIN_SERVER;
@@ -165,9 +167,17 @@ describe('GET /api/config', () => {
       expect(response.statusCode).toBe(200);
       expect(response.body).not.toHaveProperty('balance');
       expect(response.body).not.toHaveProperty('bundlerURL');
+      expect(response.body).not.toHaveProperty('staticBundlerURL');
       expect(response.body).not.toHaveProperty('conversationImportMaxFileSize');
       expect(response.body).not.toHaveProperty('modelSpecs');
       expect(response.body).not.toHaveProperty('webSearch');
+      expect(response.body).not.toHaveProperty('analyticsGtmId');
+      expect(response.body).not.toHaveProperty('customFooter');
+      expect(response.body).not.toHaveProperty('sharePointFilePickerEnabled');
+      expect(response.body).not.toHaveProperty('sharePointBaseUrl');
+      expect(response.body).not.toHaveProperty('sharePointPickerGraphScope');
+      expect(response.body).not.toHaveProperty('sharePointPickerSharePointScope');
+      expect(response.body).not.toHaveProperty('allowAccountDeletion');
     });
 
     it('includes only privacyPolicy and termsOfService from interface config', async () => {
@@ -201,7 +211,7 @@ describe('GET /api/config', () => {
       );
     });
 
-    it('should advertise CloudFront cookie refresh only when signed-cookie mode is active', async () => {
+    it('should omit CloudFront cookie refresh from unauthenticated response', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
       mockGetCloudFrontConfig.mockReturnValue({
         domain: 'https://cdn.example.com',
@@ -209,24 +219,6 @@ describe('GET /api/config', () => {
         cookieDomain: '.example.com',
         privateKey: 'test-private-key',
         keyPairId: 'K123ABC',
-      });
-      const app = createApp(null);
-
-      const response = await request(app).get('/api/config');
-
-      expect(response.body.cloudFront).toEqual({
-        cookieRefresh: {
-          endpoint: '/api/auth/cloudfront/refresh',
-          domain: 'https://cdn.example.com',
-        },
-      });
-    });
-
-    it('should omit CloudFront cookie refresh when signed-cookie mode is inactive', async () => {
-      mockGetAppConfig.mockResolvedValue(baseAppConfig);
-      mockGetCloudFrontConfig.mockReturnValue({
-        domain: 'https://cdn.example.com',
-        imageSigning: 'url',
       });
       const app = createApp(null);
 
@@ -248,13 +240,21 @@ describe('GET /api/config', () => {
       expect(response.body).not.toHaveProperty('cloudFront');
     });
 
-    it('defaults allowAccountDeletion to true when env var is unset', async () => {
+    it('omits authenticated-only informational fields from unauthenticated response', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
+      process.env.CUSTOM_FOOTER = 'authenticated footer text';
       const app = createApp(null);
 
       const response = await request(app).get('/api/config');
 
-      expect(response.body.allowAccountDeletion).toBe(true);
+      expect(response.body).not.toHaveProperty('showBirthdayIcon');
+      expect(response.body).not.toHaveProperty('sharedLinksEnabled');
+      expect(response.body).not.toHaveProperty('publicSharedLinksEnabled');
+      expect(response.body).not.toHaveProperty('openidReuseTokens');
+      expect(response.body).not.toHaveProperty('allowAccountDeletion');
+      expect(response.body).not.toHaveProperty('analyticsGtmId');
+      expect(response.body).not.toHaveProperty('customFooter');
     });
 
     it('omits buildInfo in unauthenticated response when interface.buildInfo is false', async () => {
@@ -401,6 +401,8 @@ describe('GET /api/config', () => {
 
     it('includes branding and authenticated-only env var fields', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
+      process.env.CUSTOM_FOOTER = 'authenticated footer text';
       process.env.SANDPACK_BUNDLER_URL = 'https://bundler.test';
       process.env.SANDPACK_STATIC_BUNDLER_URL = 'https://static-bundler.test';
       process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES = '5000000';
@@ -418,6 +420,33 @@ describe('GET /api/config', () => {
       expect(response.body.bundlerURL).toBe('https://bundler.test');
       expect(response.body.staticBundlerURL).toBe('https://static-bundler.test');
       expect(response.body.conversationImportMaxFileSize).toBe(5000000);
+      expect(response.body.analyticsGtmId).toBe('GTM-XYZ');
+      expect(response.body.customFooter).toBe('authenticated footer text');
+      expect(response.body).toHaveProperty('sharedLinksEnabled');
+      expect(response.body).toHaveProperty('publicSharedLinksEnabled');
+      expect(response.body).toHaveProperty('showBirthdayIcon');
+      expect(response.body).toHaveProperty('openidReuseTokens');
+    });
+
+    it('advertises CloudFront cookie refresh to authenticated users when signed-cookie mode is active', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      mockGetCloudFrontConfig.mockReturnValue({
+        domain: 'https://cdn.example.com',
+        imageSigning: 'cookies',
+        cookieDomain: '.example.com',
+        privateKey: 'test-private-key',
+        keyPairId: 'K123ABC',
+      });
+      const app = createApp(mockUser);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.body.cloudFront).toEqual({
+        cookieRefresh: {
+          endpoint: '/api/auth/cloudfront/refresh',
+          domain: 'https://cdn.example.com',
+        },
+      });
     });
 
     it('sets allowAccountDeletion to false for authenticated users without ACCESS_ADMIN', async () => {

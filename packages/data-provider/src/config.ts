@@ -1071,6 +1071,23 @@ export type TBrandingConfig = z.infer<typeof brandingConfigSchema> & {
 
 export const brandingSchema = brandingConfigSchema.optional();
 
+export type TRumConfig = {
+  provider: 'hyperdx';
+  enabled: boolean;
+  url: string;
+  serviceName: string;
+  authMode: 'publicToken' | 'proxy';
+  publicToken?: string;
+  tracePropagationTargets?: string[];
+  consoleCapture?: boolean;
+  disableReplay?: boolean;
+  advancedNetworkCapture?: boolean;
+  sampleRate?: number;
+  environment?: string;
+};
+
+export type StartupConfigContext = 'share';
+
 export type TStartupConfig = {
   appTitle: string;
   socialLogins?: string[];
@@ -1110,7 +1127,14 @@ export type TStartupConfig = {
   modelDescriptions?: Record<string, Record<string, string>>;
   sharedLinksEnabled: boolean;
   publicSharedLinksEnabled: boolean;
+  /** Whether shared links snapshot conversation files (gates the per-link "share files" checkbox). */
+  sharedLinksSnapshotFilesEnabled?: boolean;
+  /** Effective default timing for when conversation titles become fetchable.
+   * `immediate` = fetch in parallel with the active stream (default);
+   * `final` = fetch only after the stream completes (legacy). */
+  titleGenerationTiming?: 'immediate' | 'final';
   analyticsGtmId?: string;
+  rum?: TRumConfig;
   bundlerURL?: string;
   staticBundlerURL?: string;
   sharePointFilePickerEnabled?: boolean;
@@ -1157,6 +1181,19 @@ export type TStartupConfig = {
     buildDate?: string | null;
   };
 };
+
+export type TSharedLinkStartupInterface = Pick<
+  Partial<TInterfaceConfig>,
+  'privacyPolicy' | 'termsOfService'
+>;
+
+export type TSharedLinkStartupConfig = Pick<TStartupConfig, 'appTitle'> &
+  Pick<
+    Partial<TStartupConfig>,
+    'analyticsGtmId' | 'bundlerURL' | 'customFooter' | 'staticBundlerURL'
+  > & {
+    interface?: TSharedLinkStartupInterface;
+  };
 
 export enum OCRStrategy {
   MISTRAL_OCR = 'mistral_ocr',
