@@ -28,7 +28,9 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const { data: config } = useGetStartupConfig();
-  const useUsernameLogin = config?.ldap?.username;
+  const useUsernameLogin = Boolean(
+    config?.ldap?.username || startupConfig.emailLoginEnabled === false,
+  );
   const loginFieldName: keyof TLoginUser = useUsernameLogin ? 'username' : 'email';
   const validTheme = isDark(theme) ? 'dark' : 'light';
   const requireCaptcha = Boolean(startupConfig.turnstile?.siteKey);
@@ -67,6 +69,9 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
   };
 
   const handleResendEmail = () => {
+    if (useUsernameLogin) {
+      return setShowResendLink(false);
+    }
     const email = getValues('email');
     if (!email) {
       return setShowResendLink(false);
