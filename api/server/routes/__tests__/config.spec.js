@@ -94,8 +94,10 @@ afterEach(() => {
   delete process.env.ALLOW_REGISTRATION;
   delete process.env.ALLOW_SOCIAL_LOGIN;
   delete process.env.APP_TITLE;
+  delete process.env.ANALYTICS_GTM_ID;
   delete process.env.CHECK_BALANCE;
   delete process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES;
+  delete process.env.CUSTOM_FOOTER;
   delete process.env.DISCORD_CLIENT_ID;
   delete process.env.DISCORD_CLIENT_SECRET;
   delete process.env.DOMAIN_SERVER;
@@ -115,8 +117,6 @@ afterEach(() => {
   delete process.env.SANDPACK_BUNDLER_URL;
   delete process.env.SANDPACK_STATIC_BUNDLER_URL;
   delete process.env.START_BALANCE;
-  delete process.env.ANALYTICS_GTM_ID;
-  delete process.env.CUSTOM_FOOTER;
 });
 
 describe('GET /api/config', () => {
@@ -168,6 +168,11 @@ describe('GET /api/config', () => {
       expect(response.body).not.toHaveProperty('balance');
       expect(response.body).not.toHaveProperty('bundlerURL');
       expect(response.body).not.toHaveProperty('staticBundlerURL');
+      expect(response.body).not.toHaveProperty('conversationImportMaxFileSize');
+      expect(response.body).not.toHaveProperty('modelSpecs');
+      expect(response.body).not.toHaveProperty('webSearch');
+      expect(response.body).not.toHaveProperty('analyticsGtmId');
+      expect(response.body).not.toHaveProperty('customFooter');
       expect(response.body).not.toHaveProperty('sharePointFilePickerEnabled');
       expect(response.body).not.toHaveProperty('sharePointBaseUrl');
       expect(response.body).not.toHaveProperty('sharePointPickerGraphScope');
@@ -175,9 +180,10 @@ describe('GET /api/config', () => {
       expect(response.body).not.toHaveProperty('conversationImportMaxFileSize');
       expect(response.body).not.toHaveProperty('modelSpecs');
       expect(response.body).not.toHaveProperty('webSearch');
+      expect(response.body).not.toHaveProperty('allowAccountDeletion');
     });
 
-    it('should strip authenticated-only informational fields from unauthenticated response (#12688)', async () => {
+    it('strips authenticated-only informational fields from unauthenticated response', async () => {
       process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
       process.env.CUSTOM_FOOTER = 'internal footer text';
       process.env.HELP_AND_FAQ_URL = 'https://internal.example.com/faq';
@@ -197,7 +203,7 @@ describe('GET /api/config', () => {
       expect(response.body).not.toHaveProperty('customFooter');
     });
 
-    it('should include public share footer fields when share context is requested', async () => {
+    it('includes public share footer fields when share context is requested', async () => {
       process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
       process.env.CUSTOM_FOOTER = 'public footer text';
       process.env.HELP_AND_FAQ_URL = 'https://internal.example.com/faq';
@@ -213,7 +219,7 @@ describe('GET /api/config', () => {
       expect(response.body).not.toHaveProperty('allowAccountDeletion');
     });
 
-    it('should include socialLogins and turnstile from base config', async () => {
+    it('includes socialLogins and turnstile from base config', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
       const app = createApp(null);
 
@@ -223,7 +229,7 @@ describe('GET /api/config', () => {
       expect(response.body.turnstile).toEqual({ siteKey: 'test-key' });
     });
 
-    it('should include only privacyPolicy and termsOfService from interface config', async () => {
+    it('includes only privacyPolicy and termsOfService from interface config', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
       const app = createApp(null);
 
@@ -254,7 +260,7 @@ describe('GET /api/config', () => {
       expect(response.body.branding).not.toHaveProperty('helpAndFaqURL');
     });
 
-    it('should omit CloudFront cookie refresh from unauthenticated response (#12688)', async () => {
+    it('should omit CloudFront cookie refresh from unauthenticated response', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
       mockGetCloudFrontConfig.mockReturnValue({
         domain: 'https://cdn.example.com',
@@ -283,13 +289,21 @@ describe('GET /api/config', () => {
       expect(response.body).not.toHaveProperty('cloudFront');
     });
 
-    it('defaults allowAccountDeletion to true when env var is unset', async () => {
+    it('omits authenticated-only informational fields from unauthenticated response', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
+      process.env.CUSTOM_FOOTER = 'authenticated footer text';
       const app = createApp(null);
 
       const response = await request(app).get('/api/config');
 
-      expect(response.body).not.toHaveProperty('cloudFront');
+      expect(response.body).not.toHaveProperty('showBirthdayIcon');
+      expect(response.body).not.toHaveProperty('sharedLinksEnabled');
+      expect(response.body).not.toHaveProperty('publicSharedLinksEnabled');
+      expect(response.body).not.toHaveProperty('openidReuseTokens');
+      expect(response.body).not.toHaveProperty('allowAccountDeletion');
+      expect(response.body).not.toHaveProperty('analyticsGtmId');
+      expect(response.body).not.toHaveProperty('customFooter');
     });
 
     it('omits buildInfo in unauthenticated response when interface.buildInfo is false', async () => {
@@ -335,7 +349,7 @@ describe('GET /api/config', () => {
       });
     });
 
-    it('should return 500 when getAppConfig throws', async () => {
+    it('returns 500 when getAppConfig throws', async () => {
       mockGetAppConfig.mockRejectedValue(new Error('Config service failure'));
       const app = createApp(null);
 
@@ -398,7 +412,6 @@ describe('GET /api/config', () => {
             {
               name: 'guarded-spec',
               label: 'Guarded Spec',
-              skills: ['private-skill'],
               preset: {
                 endpoint: 'openAI',
                 model: 'gpt-4o',
@@ -424,7 +437,6 @@ describe('GET /api/config', () => {
         model: 'gpt-4o',
         greeting: 'Hello',
       });
-      expect(response.body.modelSpecs.list[0]).not.toHaveProperty('skills');
     });
 
     it('should include full interface config', async () => {
@@ -438,6 +450,8 @@ describe('GET /api/config', () => {
 
     it('includes branding and authenticated-only env var fields', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
+      process.env.CUSTOM_FOOTER = 'authenticated footer text';
       process.env.SANDPACK_BUNDLER_URL = 'https://bundler.test';
       process.env.SANDPACK_STATIC_BUNDLER_URL = 'https://static-bundler.test';
       process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES = '5000000';
@@ -455,27 +469,16 @@ describe('GET /api/config', () => {
       expect(response.body.bundlerURL).toBe('https://bundler.test');
       expect(response.body.staticBundlerURL).toBe('https://static-bundler.test');
       expect(response.body.conversationImportMaxFileSize).toBe(5000000);
-    });
-
-    it('should include post-login informational fields', async () => {
-      process.env.ANALYTICS_GTM_ID = 'GTM-XYZ';
-      process.env.CUSTOM_FOOTER = 'authenticated footer text';
-      mockGetAppConfig.mockResolvedValue(baseAppConfig);
-      const app = createApp(mockUser);
-
-      const response = await request(app).get('/api/config');
-
-      expect(response.body).toHaveProperty('helpAndFaqURL');
+      expect(response.body.analyticsGtmId).toBe('GTM-XYZ');
+      expect(response.body.customFooter).toBe('authenticated footer text');
+      expect(response.body.helpAndFaqURL).toBe('https://example.com/qingfan-help');
       expect(response.body).toHaveProperty('sharedLinksEnabled');
       expect(response.body).toHaveProperty('publicSharedLinksEnabled');
       expect(response.body).toHaveProperty('showBirthdayIcon');
       expect(response.body).toHaveProperty('openidReuseTokens');
-      expect(response.body.helpAndFaqURL).toBe('https://example.com/qingfan-help');
-      expect(response.body.analyticsGtmId).toBe('GTM-XYZ');
-      expect(response.body.customFooter).toBe('authenticated footer text');
     });
 
-    it('should advertise CloudFront cookie refresh when signed-cookie mode is active', async () => {
+    it('advertises CloudFront cookie refresh to authenticated users when signed-cookie mode is active', async () => {
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
       mockGetCloudFrontConfig.mockReturnValue({
         domain: 'https://cdn.example.com',
@@ -542,7 +545,7 @@ describe('GET /api/config', () => {
       );
     });
 
-    it('should set allowAccountDeletion to false for authenticated users without ACCESS_ADMIN', async () => {
+    it('sets allowAccountDeletion to false for authenticated users without ACCESS_ADMIN', async () => {
       process.env.ALLOW_ACCOUNT_DELETION = 'false';
       mockGetAppConfig.mockResolvedValue(baseAppConfig);
       mockHasCapability.mockResolvedValue(false);

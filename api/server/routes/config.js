@@ -6,6 +6,7 @@ const {
   resolveBuildInfo,
   resolveTitleTiming,
   sanitizeModelSpecs,
+  isFileSnapshotEnabled,
 } = require('@librechat/api');
 const {
   EModelEndpoint,
@@ -84,9 +85,11 @@ function buildBrandingPayload(appConfig, options = {}) {
     logoVariant,
     process.env.HELP_AND_FAQ_URL || 'https://librechat.ai',
   );
+  const { helpAndFaqURL: _helpAndFaqURL, ...publicBranding } = configBranding ?? {};
+  const brandingSource = includeHelpAndFaqURL ? (configBranding ?? {}) : publicBranding;
 
   const branding = removeNullishValues({
-    ...(configBranding ?? {}),
+    ...brandingSource,
     logoVariant,
     assetPrefix,
     appTitle,
@@ -167,9 +170,9 @@ function buildPreLoginPayload(appConfig) {
 }
 
 /**
- * Public share fields rendered by `client/src/components/Share/ShareView.tsx`.
- * They remain off the default anonymous config used by login screens, and are
- * exposed to anonymous callers only when the client asks for share context.
+ * Fields shared by authenticated chat and share-view config. Anonymous share
+ * views receive these through `/api/share/:shareId/config` after share access
+ * checks, not through the generic startup config endpoint.
  */
 function buildPublicSharePayload() {
   /** @type {Partial<TStartupConfig>} */
@@ -191,9 +194,11 @@ function buildPublicSharePayload() {
  * are not exposed to unauthenticated callers.
  */
 function buildPostLoginPayload(appConfig) {
+  const brandingPayload = buildBrandingPayload(appConfig);
+
   /** @type {Partial<TStartupConfig>} */
   const payload = {
-    ...buildBrandingPayload(appConfig),
+    ...brandingPayload,
     showBirthdayIcon:
       isBirthday() ||
       isEnabled(process.env.SHOW_BIRTHDAY_ICON) ||
@@ -320,6 +325,7 @@ router.get('/', async function (req, res) {
       ...preLoginPayload,
       ...publicSharePayload,
       ...buildPostLoginPayload(appConfig),
+      sharedLinksSnapshotFilesEnabled: sharedLinksEnabled && isFileSnapshotEnabled(appConfig),
       socialLogins: appConfig?.registration?.socialLogins ?? defaultSocialLogins,
       interface: appConfig?.interfaceConfig,
       titleGenerationTiming: resolveTitleTiming({

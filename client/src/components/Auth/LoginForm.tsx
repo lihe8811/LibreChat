@@ -4,7 +4,7 @@ import { Turnstile } from '@marsidev/react-turnstile';
 import { ThemeContext, SecretInput, Spinner, Button, isDark } from '@librechat/client';
 import type { TLoginUser, TStartupConfig } from 'librechat-data-provider';
 import type { TAuthContext } from '~/common';
-import { useResendVerificationEmail } from '~/data-provider';
+import { useResendVerificationEmail, useGetStartupConfig } from '~/data-provider';
 import { validateEmail } from '~/utils';
 import { useLocalize } from '~/hooks';
 
@@ -27,9 +27,11 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
   const [showResendLink, setShowResendLink] = useState<boolean>(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
+  const { data: config } = useGetStartupConfig();
   const useUsernameLogin = Boolean(
-    startupConfig?.ldap?.username || startupConfig?.emailLoginEnabled === false,
+    config?.ldap?.username || startupConfig.emailLoginEnabled === false,
   );
+  const loginFieldName: keyof TLoginUser = useUsernameLogin ? 'username' : 'email';
   const validTheme = isDark(theme) ? 'dark' : 'light';
   const requireCaptcha = Boolean(startupConfig.turnstile?.siteKey);
   const authInputClassName =
@@ -57,7 +59,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
     return null;
   }
 
-  const renderError = (fieldName: keyof TLoginUser) => {
+  const renderError = (fieldName: string) => {
     const errorMessage = errors[fieldName]?.message;
     return errorMessage ? (
       <span role="alert" className="mt-1 text-sm text-red-600 dark:text-red-500">
@@ -76,8 +78,6 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
     }
     resendLinkMutation.mutate({ email });
   };
-
-  const loginFieldName: keyof TLoginUser = useUsernameLogin ? 'username' : 'email';
 
   return (
     <>
