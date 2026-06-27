@@ -12,6 +12,7 @@ import type { TStartupConfig, TUser } from 'librechat-data-provider';
 import { useMCPToolsQuery, useMCPServersQuery } from '~/data-provider';
 import { cleanupTimestampedStorage } from '~/utils/timestamps';
 import useSpeechSettingsInit from './useSpeechSettingsInit';
+import { applyBrandFavicon } from '~/utils/branding';
 import { useHasAccess } from '~/hooks';
 import store from '~/store';
 
@@ -56,6 +57,10 @@ export default function useAppStartup({
     document.title = appTitle;
     localStorage.setItem(LocalStorageKeys.APP_TITLE, appTitle);
   }, [startupConfig]);
+
+  useEffect(() => {
+    applyBrandFavicon(startupConfig?.branding);
+  }, [startupConfig?.branding]);
 
   /** Set the default spec's preset as default */
   useEffect(() => {
